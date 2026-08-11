@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - configmap.yaml
+  - devs-service.yaml
+  - devs-frontend.yaml
+  - pod-disruption-budgets.yaml
+images:
+  - name: ghcr.io/kstacks-org/devs-service
+    newTag: replace-me
+  - name: ghcr.io/kstacks-org/devs-frontend
+    newTag: replace-me

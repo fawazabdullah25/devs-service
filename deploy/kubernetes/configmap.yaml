@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devs-config
+  labels:
+    app.kubernetes.io/part-of: kstacks-devs
+data:
+  SPRING_PROFILES_ACTIVE: production
+  DEVS_JWT_ENABLED: "true"
+  DEVS_ALLOW_INSECURE_ADMIN: "false"
+  DEVS_FRONTEND_ORIGINS: https://replace-with-devs-origin.example
+  DEVS_ADMIN_ROLES: DEVS_ADMIN,ADMIN
+  DEVS_STUDENT_ROLES: STUDENT
+  R2_ENABLED: "true"
+  R2_REGION: auto
+  MUX_ENABLED: "true"
+  MUX_PLAYBACK_POLICY: public
+  SERVER_PORT: "8080"

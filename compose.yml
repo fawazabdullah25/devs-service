@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-devs}
+      POSTGRES_USER: ${POSTGRES_USER:-devs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devs}
+    ports:
+      - "5432:5432"
+    volumes:
+      - devs-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-devs} -d ${POSTGRES_DB:-devs}",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  service:
+    build: .
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-devs}
+      DB_USERNAME: ${POSTGRES_USER:-devs}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-devs}
+      DEVS_JWT_ENABLED: ${DEVS_JWT_ENABLED:-false}
+      DEVS_ALLOW_INSECURE_ADMIN: ${DEVS_ALLOW_INSECURE_ADMIN:-true}
+      DEVS_JWT_PUBLIC_KEY: ${DEVS_JWT_PUBLIC_KEY:-}
+      DEVS_JWT_ISSUER: ${DEVS_JWT_ISSUER:-}
+      DEVS_ADMIN_SUBJECTS: ${DEVS_ADMIN_SUBJECTS:-}
+      DEVS_FRONTEND_ORIGINS: http://localhost:3000
+      R2_ENABLED: ${R2_ENABLED:-false}
+      R2_ENDPOINT: ${R2_ENDPOINT:-}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      MUX_ENABLED: ${MUX_ENABLED:-false}
+      MUX_TOKEN_ID: ${MUX_TOKEN_ID:-}
+      MUX_TOKEN_SECRET: ${MUX_TOKEN_SECRET:-}
+      MUX_WEBHOOK_SECRET: ${MUX_WEBHOOK_SECRET:-}
+      MUX_PLAYBACK_POLICY: ${MUX_PLAYBACK_POLICY:-public}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ../devs-frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080/devs/api/v1}
+        VITE_USE_MOCKS: "false"
+    environment:
+      PORT: 3000
+    depends_on:
+      - service
+    ports:
+      - "3000:3000"
+
+volumes:
+  devs-postgres:

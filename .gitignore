@@ -1,0 +1,14 @@
+.env
+.env.local
+*.log
+.DS_Store
+.idea/
+.vscode/
+target/
+
+tools/telegram-import/.venv/
+tools/telegram-import/.telegram-session*
+tools/telegram-import/output/
+tools/telegram-import/*.session
+tools/telegram-import/*.session-journal
+tools/telegram-import/__pycache__/

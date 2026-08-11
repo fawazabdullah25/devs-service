@@ -1,0 +1,77 @@
+spring:
+  application:
+    name: devs-service
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/devs}
+    username: ${DB_USERNAME:devs}
+    password: ${DB_PASSWORD:devs}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        order_inserts: true
+        order_updates: true
+  flyway:
+    enabled: true
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+
+devs:
+  frontend-origins: ${DEVS_FRONTEND_ORIGINS:http://localhost:3000}
+  security:
+    jwt-enabled: ${DEVS_JWT_ENABLED:false}
+    allow-insecure-admin: ${DEVS_ALLOW_INSECURE_ADMIN:false}
+    public-key: ${DEVS_JWT_PUBLIC_KEY:}
+    issuer: ${DEVS_JWT_ISSUER:}
+    admin-roles: ${DEVS_ADMIN_ROLES:DEVS_ADMIN,ADMIN}
+    student-roles: ${DEVS_STUDENT_ROLES:STUDENT}
+    admin-subjects: ${DEVS_ADMIN_SUBJECTS:}
+  media:
+    max-upload-bytes: ${DEVS_MAX_UPLOAD_BYTES:5368709120}
+    upload-expiry-minutes: ${DEVS_UPLOAD_EXPIRY_MINUTES:20}
+  r2:
+    enabled: ${R2_ENABLED:false}
+    endpoint: ${R2_ENDPOINT:}
+    region: ${R2_REGION:auto}
+    bucket: ${R2_BUCKET:}
+    access-key-id: ${R2_ACCESS_KEY_ID:}
+    secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+  mux:
+    enabled: ${MUX_ENABLED:false}
+    token-id: ${MUX_TOKEN_ID:}
+    token-secret: ${MUX_TOKEN_SECRET:}
+    webhook-secret: ${MUX_WEBHOOK_SECRET:}
+    playback-policy: ${MUX_PLAYBACK_POLICY:public}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: production
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+devs:
+  security:
+    allow-insecure-admin: false

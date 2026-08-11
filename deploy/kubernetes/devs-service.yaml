@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devs-service
+  labels:
+    app.kubernetes.io/name: devs-service
+    app.kubernetes.io/part-of: kstacks-devs
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devs-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devs-service
+        app.kubernetes.io/part-of: kstacks-devs
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: service
+          image: ghcr.io/kstacks-org/devs-service
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: devs-config
+            - secretRef:
+                name: devs-secrets
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 200m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+          volumeMounts:
+            - name: temp
+              mountPath: /tmp
+      volumes:
+        - name: temp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devs-service
+  labels:
+    app.kubernetes.io/name: devs-service
+    app.kubernetes.io/part-of: kstacks-devs
+spec:
+  selector:
+    app.kubernetes.io/name: devs-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
