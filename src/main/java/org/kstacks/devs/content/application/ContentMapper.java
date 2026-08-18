@@ -7,12 +7,19 @@ import org.kstacks.devs.content.domain.LearningContentEntity;
 import org.kstacks.devs.media.domain.MediaAssetEntity;
 import org.kstacks.devs.media.domain.MediaProvider;
 import org.kstacks.devs.media.domain.MediaStatus;
+import org.kstacks.devs.media.application.StaticHlsLocationResolver;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
 
 @Component
 public class ContentMapper {
+    private final StaticHlsLocationResolver staticHlsLocations;
+
+    public ContentMapper(StaticHlsLocationResolver staticHlsLocations) {
+        this.staticHlsLocations = staticHlsLocations;
+    }
+
     public ContentDtos.LearningContent toDto(LearningContentEntity entity) {
         var topics = entity.getTopicSlugs().stream()
             .sorted()
@@ -48,12 +55,24 @@ public class ContentMapper {
         );
     }
 
-    private ContentDtos.MediaAsset toDto(MediaAssetEntity media) {
+    ContentDtos.MediaAsset toDto(MediaAssetEntity media) {
         if (media == null) {
-            return new ContentDtos.MediaAsset(null, MediaStatus.UPLOADING, 0, null, null, MediaProvider.MUX);
+            return new ContentDtos.MediaAsset(
+                null, MediaStatus.UPLOADING, 0, null, null, null, MediaProvider.MUX, java.util.List.of()
+            );
         }
+        var playbackUrl = media.getPlaybackPath() == null ? null : staticHlsLocations.resolve(media.getPlaybackPath());
+        var captions = media.getCaptionTracks().stream()
+            .map(track -> new ContentDtos.CaptionTrack(
+                track.getLanguage(),
+                track.getLabel(),
+                staticHlsLocations.resolve(track.getPath()),
+                track.isDefaultTrack()
+            ))
+            .toList();
         return new ContentDtos.MediaAsset(
-            media.getId(), media.getStatus(), media.getDurationSeconds(), media.getPlaybackId(), null, media.getProvider()
+            media.getId(), media.getStatus(), media.getDurationSeconds(), media.getPlaybackId(), playbackUrl, null,
+            media.getProvider(), captions
         );
     }
 

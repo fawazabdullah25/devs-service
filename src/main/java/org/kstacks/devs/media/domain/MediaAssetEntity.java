@@ -1,16 +1,21 @@
 package org.kstacks.devs.media.domain;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -35,6 +40,16 @@ public class MediaAssetEntity {
 
     @Column(name = "playback_id")
     private String playbackId;
+
+    @Column(name = "playback_path")
+    private String playbackPath;
+
+    @Column(name = "encoding_version", length = 120)
+    private String encodingVersion;
+
+    @ElementCollection
+    @CollectionTable(name = "media_caption_tracks", joinColumns = @JoinColumn(name = "media_id"))
+    private List<MediaCaptionTrack> captionTracks = new ArrayList<>();
 
     @Column(name = "source_object_key")
     private String sourceObjectKey;
@@ -79,6 +94,25 @@ public class MediaAssetEntity {
         return media;
     }
 
+    public static MediaAssetEntity staticHls(
+        String playbackPath,
+        long durationSeconds,
+        String checksumSha256,
+        String encodingVersion,
+        List<MediaCaptionTrack> captionTracks
+    ) {
+        var media = new MediaAssetEntity();
+        media.id = UUID.randomUUID();
+        media.provider = MediaProvider.STATIC_HLS;
+        media.status = MediaStatus.READY;
+        media.playbackPath = playbackPath;
+        media.durationSeconds = durationSeconds;
+        media.checksumSha256 = checksumSha256;
+        media.encodingVersion = encodingVersion;
+        media.captionTracks.addAll(captionTracks);
+        return media;
+    }
+
     public void markProcessing(String providerAssetId) {
         this.providerAssetId = providerAssetId;
         this.status = MediaStatus.PROCESSING;
@@ -114,10 +148,14 @@ public class MediaAssetEntity {
     public MediaStatus getStatus() { return status; }
     public String getProviderAssetId() { return providerAssetId; }
     public String getPlaybackId() { return playbackId; }
+    public String getPlaybackPath() { return playbackPath; }
+    public String getEncodingVersion() { return encodingVersion; }
+    public List<MediaCaptionTrack> getCaptionTracks() { return List.copyOf(captionTracks); }
     public String getSourceObjectKey() { return sourceObjectKey; }
     public String getSourceFilename() { return sourceFilename; }
     public String getSourceContentType() { return sourceContentType; }
     public long getDurationSeconds() { return durationSeconds; }
+    public String getChecksumSha256() { return checksumSha256; }
     public String getFailureMessage() { return failureMessage; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

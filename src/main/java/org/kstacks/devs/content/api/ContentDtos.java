@@ -12,6 +12,7 @@ import org.kstacks.devs.media.domain.MediaProvider;
 import org.kstacks.devs.media.domain.MediaStatus;
 
 import java.time.Instant;
+import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,13 +23,16 @@ public final class ContentDtos {
     public record Instructor(UUID id, LocalizedText name, LocalizedText bio, String initials, String avatarUrl) {}
     public record Topic(String id, String slug, LocalizedText name) {}
     public record Level(String id, String slug, LocalizedText name) {}
+    public record CaptionTrack(String language, String label, URI url, boolean defaultTrack) {}
     public record MediaAsset(
         UUID id,
         MediaStatus status,
         long durationSeconds,
         String playbackId,
+        URI playbackUrl,
         String playbackToken,
-        MediaProvider provider
+        MediaProvider provider,
+        List<CaptionTrack> captions
     ) {}
     public record ContentUnit(
         UUID id,

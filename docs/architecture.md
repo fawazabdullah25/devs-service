@@ -1,6 +1,6 @@
 # KStack Devs
 
-Devs is KStack's bilingual, mobile-first learning service for free Courses and multi-video Series. This workspace contains a working TanStack Start frontend, a Spring Boot API, a resumable Telegram-to-R2/Mux importer, Docker Compose for local integration, and a hardened Kubernetes base.
+Devs is KStack's bilingual, mobile-first learning service for free Courses and multi-video Series. This workspace contains a working TanStack Start frontend, a Spring Boot API, validated static HLS delivery, the retained R2-to-Mux path, Docker Compose for local integration, and a hardened Kubernetes base.
 
 The detailed product and architecture rationale remains in [project-plan.md](./project-plan.md). The standalone visual prototype is [prototype.html](./prototype.html).
 
@@ -9,19 +9,19 @@ The detailed product and architecture rationale remains in [project-plan.md](./p
 - English and Arabic routes with correct LTR/RTL direction and Alexandria typography.
 - Exact KStack green/neutral palette, light/dark themes, official Devs mark, and responsive ShadCN/Base UI components.
 - Public landing page, featured carousel hidden below four items, filterable catalog, Course pages, Series pages, and lesson playback routes.
-- Admin metadata editor, direct-to-R2 video upload with progress, Mux ingest, lesson attachment, publication validation, preview, and archive.
+- Admin metadata editor, validated static-HLS registration, optional direct-to-R2/Mux upload, lesson attachment, publication validation, preview, and archive.
 - Spring Boot/PostgreSQL domain with Flyway migrations, validation, optimistic locking, health probes, provider adapters, and RFC 9457 problem responses.
 - Public-by-default content with `PUBLIC`, `AUTHENTICATED`, and `STUDENT_ONLY` policy values so account restrictions can be enabled without changing the content/media model.
 - ES256 verification of the existing KStacks JWT, role-claim support, and a safe UUID subject allowlist bridge for the current role-less token.
-- Resumable, checksum-deduplicated Telegram channel migration that stores masters in R2 and idempotently registers them for Mux processing.
+- Provider-neutral media records with immutable HLS paths, normalized VTT tracks, and a resumable Telegram migration path for retained source masters.
 - Unit tests, production Dockerfiles, local Compose, and Kubernetes Deployments/Services/probes/resources/security contexts/PDBs.
 
 ## Repository map
 
 | Path                     | Purpose                                                                                   |
 | ------------------------ | ----------------------------------------------------------------------------------------- |
-| sibling `devs-frontend`  | React 19, TanStack Start/Router, Tailwind 4, ShadCN/Base UI, Mux Player                   |
-| repository root          | Java 25, Spring Boot 4, PostgreSQL, Flyway, Spring Security, R2 and Mux adapters          |
+| sibling `devs-frontend`  | React 19, TanStack Start/Router, Tailwind 4, ShadCN/Base UI, Vidstack/HLS and Mux adapters |
+| repository root          | Java 25, Spring Boot 4, PostgreSQL, Flyway, Spring Security, static HLS, R2, and Mux      |
 | `tools/telegram-import/` | Authorized one-time Telethon migration CLI                                                |
 | `deploy/kubernetes/`     | Kustomize-ready production base; intentionally excludes team-specific Ingress and secrets |
 | `compose.yml`            | Local PostgreSQL + API + frontend integration                                             |
@@ -31,17 +31,18 @@ The detailed product and architecture rationale remains in [project-plan.md](./p
 ```text
 Browser
   ├── devs-frontend (TanStack Start SSR + client navigation)
+  │     └── Vidstack + local hls.js: adaptive HLS playback and VTT captions
   ├── KStacks gateway (/devs/api/**)
   │     └── devs-service (Spring Boot)
   │           ├── PostgreSQL: catalog and publication state
-  │           ├── private R2: permanent original videos
-  │           └── Mux: encoding, adaptive playback, webhooks
-  └── Mux CDN: HLS playback
+  │           ├── validates immutable HLS/VTT objects through the configured media origin
+  │           └── optional legacy adapters: private R2 sources and Mux ingest/webhooks
+  └── Cloudflare custom domain + R2: public immutable HLS renditions
 
-Telegram importer ──> private R2 ──> Devs import API ──> Mux
+Authorized encoder on Oracle VPS ──> R2 ──> Cloudflare cache ──> browser
 ```
 
-Video bytes never pass through Spring. The browser receives a short-lived presigned R2 PUT, while Mux receives a short-lived presigned R2 GET. R2 remains the recoverable master archive; Mux handles streaming renditions.
+Video bytes never pass through Spring. For static HLS, an operator encodes and uploads a new immutable version, publishes `master.m3u8` last, then registers relative paths in Devs. Spring performs bounded server-side validation before marking the asset `READY`; the browser receives resolved URLs. The old direct-upload/Mux route remains available behind its provider flags.
 
 ## Fastest local preview
 
@@ -64,7 +65,7 @@ Copy `.env.example` to `.env`, choose a local PostgreSQL password, then run:
 docker compose up --build
 ```
 
-The integrated database starts empty by design. Create drafts at `/en/admin`. Local Compose explicitly enables insecure admin access; that setting is forcibly disabled by the Spring `production` profile and must never be used in a shared environment. Media upload requires real R2 and Mux credentials.
+The integrated database starts empty by design. Create drafts at `/en/admin`. Local Compose explicitly enables insecure admin access; that setting is forcibly disabled by the Spring `production` profile and must never be used in a shared environment. Static HLS registration requires a reachable media origin and an already uploaded package. The legacy upload route additionally requires private-R2 and Mux credentials.
 
 ## Existing KStacks integration
 
@@ -101,7 +102,28 @@ Devs also understands `roles` and `realm_access.roles`. Once auth emits `DEVS_AD
 
 ## Media provisioning
 
-### Cloudflare R2
+### Static HLS delivery (default)
+
+Use a dedicated R2 bucket connected to a Cloudflare custom domain. Upload versioned packages such as `lessons/<lesson>/<encoding-version>/`, with segments and initialization objects first, then captions and rendition playlists, and `master.m3u8` last. Never overwrite a published version; create a new versioned directory instead.
+
+Configure the service:
+
+```text
+STATIC_HLS_ENABLED=true
+STATIC_HLS_BASE_URL=https://video.example.com/
+STATIC_HLS_ALLOWED_PATH_PREFIX=lessons
+STATIC_HLS_VALIDATION_TIMEOUT=10s
+```
+
+The allowlisted prefix and strict relative-path parser prevent an admin request from turning validation into an arbitrary server-side fetch. Redirects are not followed. Registration verifies the master is a multivariant HLS playlist, fetches each rendition playlist, and verifies every submitted caption starts with `WEBVTT`. Only then is the media row saved as `READY`.
+
+The frontend uses Vidstack and dynamically imports the locally installed `hls.js`; native HLS remains available where Vidstack selects it. External caption URLs are rendered as selectable tracks. The public CDN remains downloadable by design while content is public.
+
+The exact encoding/upload procedure and measurements are recorded in
+[`r2-hls-pilot-guide.md`](r2-hls-pilot-guide.md) and
+[`r2-hls-pilot-results.md`](r2-hls-pilot-results.md).
+
+### Private Cloudflare R2 sources (legacy Mux path)
 
 Create one private bucket and an R2 API token limited to that bucket. Configure the bucket to accept browser PUTs only from the Devs frontend origin:
 
@@ -119,7 +141,7 @@ Create one private bucket and an R2 API token limited to that bucket. Configure 
 
 Set `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`. Keep the bucket private and do not add a public custom domain for source videos.
 
-### Mux
+### Mux (legacy path)
 
 Create a Mux environment, API access token, and webhook signing secret. Configure the webhook URL as:
 
@@ -129,7 +151,7 @@ https://<gateway-host>/devs/api/v1/webhooks/mux
 
 Subscribe to `video.asset.ready` and `video.asset.errored`. Set `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, and `MUX_WEBHOOK_SECRET`.
 
-The day-one build uses Mux `public` playback IDs because the learning library is public. If KStacks later restricts videos to accounts or students, switch to signed Mux playback and issue short-lived playback JWTs from Devs; the content visibility model and player already have a playback-token seam, but that signing key configuration is a required security step before private rollout.
+If KStacks later restricts videos to accounts or students, public static HLS URLs are insufficient by themselves. Put authorization at the media edge—for example, signed URLs or cookies enforced by a Worker—before changing content visibility; hiding playlist URLs in the UI is not access control. Signed Mux playback remains an alternative and the player contract retains its playback-token seam.
 
 ## Production deployment
 
@@ -148,12 +170,13 @@ Never build a production frontend without `VITE_API_URL`; the build deliberately
 ## Launch checklist requiring team input
 
 - Confirm the final frontend/gateway hosts, TLS, cookie domain/SameSite behavior, and Ingress ownership.
-- Supply managed PostgreSQL, R2, Mux, central JWT public key/issuer, and initial administrator UUIDs through the cluster secret manager.
+- Supply managed PostgreSQL, central JWT public key/issuer, and initial administrator UUIDs through the cluster secret manager; add private R2/Mux secrets only if that legacy path remains enabled.
 - Apply the gateway route and anonymous matcher changes above.
-- Verify R2 CORS and complete a real multi-gigabyte upload on the target browser/network.
-- Verify Mux ready/error webhook delivery and one playable asset.
+- Verify the public HLS origin's CORS, cache policy, and content types, then register one real immutable package through Devs.
+- Repeat seeking, quality, captions, playback-rate, mobile rotation, and constrained-network tests inside the actual Devs player.
+- If Mux remains enabled, verify ready/error webhook delivery and one playable asset.
 - Review Arabic/English marketing copy, legal/privacy links, content ownership, and instructor attribution.
-- Decide whether public Mux playback remains acceptable; signed playback is mandatory before restricting content.
+- Treat signed edge delivery as mandatory before restricting static-HLS content to accounts.
 - Run the Telegram dry run, compare counts, migrate, and reconcile the JSONL manifest before publishing.
 
 ## Intentional next slices

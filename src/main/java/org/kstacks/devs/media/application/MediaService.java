@@ -7,13 +7,17 @@ import org.kstacks.devs.config.MediaProperties;
 import org.kstacks.devs.media.api.MediaDtos;
 import org.kstacks.devs.media.domain.MediaAssetEntity;
 import org.kstacks.devs.media.domain.MediaAssetRepository;
+import org.kstacks.devs.media.domain.MediaCaptionTrack;
 import org.kstacks.devs.media.domain.MediaStatus;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -23,13 +27,25 @@ public class MediaService {
     private final VideoProvider videoProvider;
     private final MediaProperties properties;
     private final ObjectMapper mapper;
+    private final StaticHlsPackageValidator staticHlsValidator;
+    private final StaticHlsLocationResolver staticHlsLocations;
 
-    public MediaService(MediaAssetRepository repository, ObjectStorage storage, VideoProvider videoProvider, MediaProperties properties, ObjectMapper mapper) {
+    public MediaService(
+        MediaAssetRepository repository,
+        ObjectStorage storage,
+        VideoProvider videoProvider,
+        MediaProperties properties,
+        ObjectMapper mapper,
+        StaticHlsPackageValidator staticHlsValidator,
+        StaticHlsLocationResolver staticHlsLocations
+    ) {
         this.repository = repository;
         this.storage = storage;
         this.videoProvider = videoProvider;
         this.properties = properties;
         this.mapper = mapper;
+        this.staticHlsValidator = staticHlsValidator;
+        this.staticHlsLocations = staticHlsLocations;
     }
 
     @Transactional
@@ -93,6 +109,38 @@ public class MediaService {
         return new MediaDtos.IngestResponse(media.getId(), media.getStatus().name(), asset.assetId());
     }
 
+    @Transactional
+    public MediaDtos.StaticHlsRegistrationResponse registerStaticHls(MediaDtos.StaticHlsRegistrationRequest request) {
+        var manifestPath = staticHlsLocations.manifestPath(request.manifestPath());
+        var captions = normalizeCaptions(request.captions());
+        var checksum = request.checksumSha256() == null ? null : request.checksumSha256().toLowerCase(Locale.ROOT);
+        var encodingVersion = request.encodingVersion().trim();
+
+        var existing = repository.findByPlaybackPath(manifestPath).orElse(null);
+        if (existing != null) {
+            if (existing.getDurationSeconds() != request.durationSeconds() ||
+                !Objects.equals(existing.getChecksumSha256(), checksum) ||
+                !Objects.equals(existing.getEncodingVersion(), encodingVersion) ||
+                !sameCaptions(existing.getCaptionTracks(), captions)) {
+                throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "This immutable HLS path is already registered with different metadata"
+                );
+            }
+            return staticHlsResponse(existing);
+        }
+
+        staticHlsValidator.validate(manifestPath, captions);
+        var media = repository.save(MediaAssetEntity.staticHls(
+            manifestPath,
+            request.durationSeconds(),
+            checksum,
+            encodingVersion,
+            captions
+        ));
+        return staticHlsResponse(media);
+    }
+
     @Transactional(readOnly = true)
     public MediaDtos.MediaStatusResponse status(UUID mediaId) {
         var media = repository.findById(mediaId)
@@ -100,9 +148,12 @@ public class MediaService {
         return new MediaDtos.MediaStatusResponse(
             media.getId(),
             media.getStatus().name(),
+            media.getProvider().name(),
             media.getProviderAssetId(),
             media.getPlaybackId(),
+            media.getPlaybackPath() == null ? null : staticHlsLocations.resolve(media.getPlaybackPath()),
             media.getDurationSeconds(),
+            captionResponses(media.getCaptionTracks()),
             media.getFailureMessage()
         );
     }
@@ -151,5 +202,60 @@ public class MediaService {
         var sanitized = basename.replaceAll("[^A-Za-z0-9._-]", "-").replaceAll("-+", "-");
         if (sanitized.isBlank() || sanitized.equals(".") || sanitized.equals("..")) sanitized = "video-upload";
         return sanitized.substring(0, Math.min(sanitized.length(), 180));
+    }
+
+    private List<MediaCaptionTrack> normalizeCaptions(List<MediaDtos.CaptionTrackRequest> requests) {
+        if (requests == null || requests.isEmpty()) return List.of();
+        var languages = new HashSet<String>();
+        var paths = new HashSet<String>();
+        var defaults = 0;
+        var tracks = new java.util.ArrayList<MediaCaptionTrack>();
+        for (var request : requests) {
+            var language = request.language().trim().toLowerCase(Locale.ROOT);
+            var path = staticHlsLocations.captionPath(request.path());
+            if (!languages.add(language)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Caption languages must be unique");
+            }
+            if (!paths.add(path)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Caption paths must be unique");
+            }
+            if (request.defaultTrack() && ++defaults > 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only one caption track can be the default");
+            }
+            tracks.add(new MediaCaptionTrack(language, request.label().trim(), path, request.defaultTrack()));
+        }
+        return List.copyOf(tracks);
+    }
+
+    private MediaDtos.StaticHlsRegistrationResponse staticHlsResponse(MediaAssetEntity media) {
+        return new MediaDtos.StaticHlsRegistrationResponse(
+            media.getId(),
+            media.getStatus().name(),
+            staticHlsLocations.resolve(media.getPlaybackPath()),
+            media.getDurationSeconds(),
+            media.getEncodingVersion(),
+            captionResponses(media.getCaptionTracks())
+        );
+    }
+
+    private List<MediaDtos.CaptionTrackResponse> captionResponses(List<MediaCaptionTrack> tracks) {
+        return tracks.stream()
+            .map(track -> new MediaDtos.CaptionTrackResponse(
+                track.getLanguage(),
+                track.getLabel(),
+                staticHlsLocations.resolve(track.getPath()),
+                track.isDefaultTrack()
+            ))
+            .toList();
+    }
+
+    private boolean sameCaptions(List<MediaCaptionTrack> left, List<MediaCaptionTrack> right) {
+        if (left.size() != right.size()) return false;
+        return left.stream().allMatch(expected -> right.stream().anyMatch(actual ->
+            expected.getLanguage().equals(actual.getLanguage()) &&
+                expected.getLabel().equals(actual.getLabel()) &&
+                expected.getPath().equals(actual.getPath()) &&
+                expected.isDefaultTrack() == actual.isDefaultTrack()
+        ));
     }
 }

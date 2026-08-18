@@ -11,8 +11,12 @@ data:
   DEVS_FRONTEND_ORIGINS: https://replace-with-devs-origin.example
   DEVS_ADMIN_ROLES: DEVS_ADMIN,ADMIN
   DEVS_STUDENT_ROLES: STUDENT
+  STATIC_HLS_ENABLED: "true"
+  STATIC_HLS_BASE_URL: https://replace-with-video-origin.example/
+  STATIC_HLS_ALLOWED_PATH_PREFIX: lessons
+  STATIC_HLS_VALIDATION_TIMEOUT: 10s
   R2_ENABLED: "true"
   R2_REGION: auto
-  MUX_ENABLED: "true"
+  MUX_ENABLED: "false"
   MUX_PLAYBACK_POLICY: public
   SERVER_PORT: "8080"

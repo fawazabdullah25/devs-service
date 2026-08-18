@@ -34,6 +34,14 @@ public class AdminMediaController {
         return service.importAndIngest(request);
     }
 
+    @PostMapping("/static-hls")
+    @ResponseStatus(HttpStatus.CREATED)
+    public MediaDtos.StaticHlsRegistrationResponse registerStaticHls(
+        @Valid @RequestBody MediaDtos.StaticHlsRegistrationRequest request
+    ) {
+        return service.registerStaticHls(request);
+    }
+
     @PostMapping("/{id}/ingest")
     public MediaDtos.IngestResponse ingest(@PathVariable UUID id) {
         return service.ingest(id);

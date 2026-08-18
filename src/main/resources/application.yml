@@ -50,6 +50,11 @@ devs:
   media:
     max-upload-bytes: ${DEVS_MAX_UPLOAD_BYTES:5368709120}
     upload-expiry-minutes: ${DEVS_UPLOAD_EXPIRY_MINUTES:20}
+  static-hls:
+    enabled: ${STATIC_HLS_ENABLED:false}
+    base-url: ${STATIC_HLS_BASE_URL:https://static-hls.invalid/}
+    allowed-path-prefix: ${STATIC_HLS_ALLOWED_PATH_PREFIX:}
+    validation-timeout: ${STATIC_HLS_VALIDATION_TIMEOUT:10s}
   r2:
     enabled: ${R2_ENABLED:false}
     endpoint: ${R2_ENDPOINT:}
