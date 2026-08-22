@@ -50,6 +50,13 @@ devs:
   media:
     max-upload-bytes: ${DEVS_MAX_UPLOAD_BYTES:5368709120}
     upload-expiry-minutes: ${DEVS_UPLOAD_EXPIRY_MINUTES:20}
+  attachments:
+    public-base-url: ${ATTACHMENTS_PUBLIC_BASE_URL:${STATIC_HLS_BASE_URL:https://attachments.invalid/}}
+    max-upload-bytes: ${ATTACHMENTS_MAX_UPLOAD_BYTES:104857600}
+    max-per-unit: ${ATTACHMENTS_MAX_PER_UNIT:20}
+    retention: ${ATTACHMENTS_RETENTION:P7D}
+    purge-delay: ${ATTACHMENTS_PURGE_DELAY:PT1H}
+    stale-upload-after: ${ATTACHMENTS_STALE_UPLOAD_AFTER:PT24H}
   static-hls:
     enabled: ${STATIC_HLS_ENABLED:false}
     base-url: ${STATIC_HLS_BASE_URL:https://static-hls.invalid/}

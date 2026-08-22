@@ -8,16 +8,26 @@ import org.kstacks.devs.media.domain.MediaAssetEntity;
 import org.kstacks.devs.media.domain.MediaProvider;
 import org.kstacks.devs.media.domain.MediaStatus;
 import org.kstacks.devs.media.application.StaticHlsLocationResolver;
+import org.kstacks.devs.attachment.application.AttachmentService;
+import org.kstacks.devs.attachment.domain.AttachmentStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Comparator;
 
 @Component
 public class ContentMapper {
     private final StaticHlsLocationResolver staticHlsLocations;
+    private final AttachmentService attachmentService;
 
-    public ContentMapper(StaticHlsLocationResolver staticHlsLocations) {
+    @Autowired
+    public ContentMapper(StaticHlsLocationResolver staticHlsLocations, AttachmentService attachmentService) {
         this.staticHlsLocations = staticHlsLocations;
+        this.attachmentService = attachmentService;
+    }
+
+    ContentMapper(StaticHlsLocationResolver staticHlsLocations) {
+        this(staticHlsLocations, null);
     }
 
     public ContentDtos.LearningContent toDto(LearningContentEntity entity) {
@@ -51,7 +61,11 @@ public class ContentMapper {
     private ContentDtos.ContentUnit toDto(ContentUnitEntity unit) {
         return new ContentDtos.ContentUnit(
             unit.getId(), unit.getSlug(), unit.getPosition(), text(unit.getTitleEn(), unit.getTitleAr()),
-            nullableText(unit.getSummaryEn(), unit.getSummaryAr()), toDto(unit.getMedia())
+            nullableText(unit.getSummaryEn(), unit.getSummaryAr()), toDto(unit.getMedia()),
+            unit.getAttachments().stream()
+                .filter(attachment -> attachment.getStatus() == AttachmentStatus.READY)
+                .map(attachmentService::toDto)
+                .toList()
         );
     }
 

@@ -3,6 +3,7 @@ package org.kstacks.devs.media.infrastructure;
 import org.kstacks.devs.media.application.ObjectStorage;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -30,11 +31,20 @@ final class R2ObjectStorage implements ObjectStorage {
 
     @Override
     public UploadGrant signUpload(String objectKey, String contentType, long contentLength) {
+        return signUpload(objectKey, contentType, contentLength, null);
+    }
+
+    @Override
+    public UploadGrant signUpload(String objectKey, String contentType, long contentLength, String contentDisposition) {
         var objectRequest = PutObjectRequest.builder()
-            .bucket(bucket).key(objectKey).contentType(contentType).contentLength(contentLength).build();
+            .bucket(bucket).key(objectKey).contentType(contentType).contentLength(contentLength)
+            .contentDisposition(contentDisposition).build();
         var request = PutObjectPresignRequest.builder().signatureDuration(uploadExpiry).putObjectRequest(objectRequest).build();
         var signed = presigner.presignPutObject(request);
-        return new UploadGrant(URI.create(signed.url().toString()), objectKey, Map.of("Content-Type", contentType), Instant.now().plus(uploadExpiry));
+        var headers = new java.util.LinkedHashMap<String, String>();
+        headers.put("Content-Type", contentType);
+        if (contentDisposition != null) headers.put("Content-Disposition", contentDisposition);
+        return new UploadGrant(URI.create(signed.url().toString()), objectKey, Map.copyOf(headers), Instant.now().plus(uploadExpiry));
     }
 
     @Override
@@ -53,6 +63,16 @@ final class R2ObjectStorage implements ObjectStorage {
             if (exception.statusCode() == 404) return false;
             throw exception;
         }
+    }
+
+    @Override
+    public long size(String objectKey) {
+        return client.headObject(HeadObjectRequest.builder().bucket(bucket).key(objectKey).build()).contentLength();
+    }
+
+    @Override
+    public void delete(String objectKey) {
+        client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(objectKey).build());
     }
 
     private URI signedUri(String value) {

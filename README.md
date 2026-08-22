@@ -1,10 +1,31 @@
-# Devs service
+# KStack Devs Service
 
-Spring Boot 4 / Java 25 service for the Devs catalog, publication workflow, access policy, and media orchestration. It supports validated static HLS delivery as well as the original R2-to-Mux workflow.
+The backend for **KStack Devs**, KStack's free learning platform for practical technology courses and multi-lesson series. It owns the catalog, publication workflow, access policy, lesson attachments, and video metadata while large files travel directly between clients and Cloudflare R2.
 
-## Local development
+## ✨ Features
 
-Copy the example environment, start PostgreSQL, then run the service:
+- Course and series catalog with Arabic and English metadata
+- Draft, publication, archive, and future-ready visibility policies
+- Validated static HLS playback with WebVTT captions
+- Direct-to-R2 lesson attachment uploads with size and type enforcement
+- Seven-day attachment deletion retention and automatic object cleanup
+- Optional legacy R2-to-Mux ingestion path
+- KStacks ES256 JWT and role integration
+- PostgreSQL schema migrations through Flyway
+- Kubernetes liveness and readiness endpoints
+
+## 🧱 Stack
+
+- Java 25 and Spring Boot 4
+- Spring MVC, Security, Validation, and Data JPA
+- PostgreSQL 17 and Flyway
+- Cloudflare R2 through the AWS S3 SDK
+- Maven, JUnit, AssertJ, and Mockito
+- Docker, GHCR, and Kubernetes
+
+## 🚀 Local development
+
+Requirements: Java 25, Maven 3.9+, Docker with Compose, and the sibling `devs-frontend` repository for the full stack.
 
 ```bash
 cp .env.example .env
@@ -12,59 +33,91 @@ docker compose up -d postgres
 mvn spring-boot:run
 ```
 
-Run the automated tests with:
+The API starts at `http://localhost:8080/devs/api/v1`. Local admin endpoints remain locked unless `DEVS_ALLOW_INSECURE_ADMIN=true`; the production profile always disables that escape hatch.
+
+Run verification with:
 
 ```bash
-mvn test
+mvn verify
 ```
 
-Public endpoints remain available with JWT disabled. Admin endpoints deny all unless local-only `DEVS_ALLOW_INSECURE_ADMIN=true` is set. The `production` profile overrides that escape hatch to false.
+Run the complete containerized stack with:
 
-## API groups
-
-- `/devs/api/v1/public/**`: published catalog/home/content.
-- `/devs/api/v1/admin/content/**`: metadata, units, publish, archive, analytics summary.
-- `/devs/api/v1/admin/media/**`: static HLS registration, presigned source uploads, Mux ingest, and processing status.
-- `/devs/api/v1/webhooks/mux`: signature-verified Mux events.
-- `/actuator/health/liveness` and `/actuator/health/readiness`: Kubernetes probes.
-
-Flyway owns the schema. Hibernate runs with `ddl-auto=validate`; never switch production to schema mutation.
-
-## Static HLS
-
-Set `STATIC_HLS_ENABLED=true`, `STATIC_HLS_BASE_URL` to the public media origin, and optionally constrain registrations with `STATIC_HLS_ALLOWED_PATH_PREFIX`. The admin endpoint `POST /devs/api/v1/admin/media/static-hls` accepts only relative, immutable manifest and VTT paths. Before creating a `READY` media record, the service fetches the master playlist, every declared rendition playlist, and every caption track; redirects and host-changing URLs are rejected.
-
-The database stores relative paths. Public APIs resolve them against `STATIC_HLS_BASE_URL`, so changing CDN hosts does not require rewriting catalog rows.
-
-Example registration body:
-
-```json
-{
-  "manifestPath": "lessons/example/2026-08-18-v1/master.m3u8",
-  "durationSeconds": 3600,
-  "encodingVersion": "2026-08-18-v1",
-  "checksumSha256": null,
-  "captions": [
-    {
-      "language": "en",
-      "label": "English",
-      "path": "lessons/example/2026-08-18-v1/captions/en.vtt",
-      "defaultTrack": false
-    }
-  ]
-}
+```bash
+docker compose up --build
 ```
 
-## Repository contents
+## 🔌 API groups
 
-- `src/`: Spring Boot application, Flyway migrations, and tests.
-- `tools/telegram-import/`: resumable Telegram-to-R2/Mux migration utility.
-- `deploy/kubernetes/`: Kustomize-ready frontend and service deployment base.
-- `compose.yml`: local PostgreSQL, service, and frontend stack. The frontend repository must be cloned beside this repository as `../devs-frontend`.
-- `docs/architecture.md`: complete architecture, environment, gateway, media, and launch guidance.
-- `docs/project-plan.md`: detailed product and implementation plan.
-- `docs/prototype.html`: standalone design brief.
-- `docs/r2-hls-pilot-guide.md`: reproducible Oracle-to-R2 HLS pilot procedure.
-- `docs/r2-hls-pilot-results.md`: measured encoding, storage, playback, and cost results.
+| Prefix | Purpose |
+|---|---|
+| `/devs/api/v1/public/**` | Published home, catalog, and content responses |
+| `/devs/api/v1/admin/content/**` | Content metadata and publication operations |
+| `/devs/api/v1/admin/media/**` | HLS registration and legacy media ingestion |
+| `/devs/api/v1/admin/units/{unitId}/attachments/**` | Attachment upload, confirmation, deletion, restore, and ordering |
+| `/devs/api/v1/webhooks/mux` | Signature-verified legacy Mux events |
+| `/actuator/health/liveness` | Container and Kubernetes liveness probe |
+| `/actuator/health/readiness` | Database-aware readiness probe |
 
-See [the architecture guide](docs/architecture.md) for all environment variables, KStacks JWT/gateway integration, media provisioning, deployment, and launch gates.
+## 📦 Attachment lifecycle
+
+Attachments belong to a content unit: the single lesson in a course or an individual episode in a series.
+
+1. An admin requests a short-lived signed upload URL.
+2. The browser uploads the file directly to R2 using the returned signed headers.
+3. The admin client confirms completion; the service checks the object and its exact byte size.
+4. Only `READY` attachments appear in public content responses.
+5. Deletion hides the attachment immediately and sets a purge time seven days ahead.
+6. The scheduled purge removes the R2 object only after the retention window. Failures are logged and retried.
+
+The initial policy accepts PDF, ZIP, Office documents, plain text, Markdown, common source-code files, PNG, JPEG, WebP, and GIF. Files are limited to 100 MiB and lessons to 20 active attachments by default. PDFs receive inline disposition; all other formats receive attachment disposition.
+
+Because the chosen R2 custom domain is public, attachment URLs are public too. Keep `attachments/` on a dedicated media origin and never store private student information there. A future authenticated-download policy should use a private bucket or signed downloads rather than CORS as access control.
+
+R2 CORS must allow the frontend origins, `PUT` and `GET`, and the `Content-Type` and `Content-Disposition` request headers.
+
+## 🎬 Static HLS
+
+Set `STATIC_HLS_ENABLED=true`, configure `STATIC_HLS_BASE_URL`, and optionally restrict registrations with `STATIC_HLS_ALLOWED_PATH_PREFIX`. `POST /devs/api/v1/admin/media/static-hls` validates the master playlist, every rendition playlist, and every caption track before creating a ready media record. Redirects and host-changing paths are rejected.
+
+The database stores relative paths, allowing the CDN hostname to change without rewriting catalog rows. See [the measured R2/HLS pilot](docs/r2-hls-pilot-results.md) and [the reproducible pilot guide](docs/r2-hls-pilot-guide.md).
+
+## ⚙️ Configuration
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | PostgreSQL connection | Local `devs` database |
+| `DEVS_FRONTEND_ORIGINS` | Comma-separated browser origins | `http://localhost:3000` |
+| `DEVS_JWT_ENABLED` | Enable KStacks JWT validation | `false` |
+| `DEVS_JWT_PUBLIC_KEY`, `DEVS_JWT_ISSUER` | ES256 trust configuration | Empty |
+| `DEVS_ADMIN_ROLES`, `DEVS_STUDENT_ROLES` | Authorized central roles | `DEVS_ADMIN,ADMIN` / `STUDENT` |
+| `STATIC_HLS_BASE_URL` | Public HLS and caption origin | Invalid placeholder |
+| `R2_ENDPOINT`, `R2_BUCKET` | R2 S3 endpoint and bucket | Empty |
+| `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Runtime-only R2 credentials | Empty |
+| `ATTACHMENTS_PUBLIC_BASE_URL` | Public R2 custom-domain origin | HLS base URL |
+| `ATTACHMENTS_MAX_UPLOAD_BYTES` | Per-file attachment limit | `104857600` |
+| `ATTACHMENTS_MAX_PER_UNIT` | Active attachments per lesson | `20` |
+| `ATTACHMENTS_RETENTION` | Soft-deletion retention | `P7D` |
+| `ATTACHMENTS_PURGE_DELAY` | Cleanup scan interval | `PT1H` |
+| `ATTACHMENTS_STALE_UPLOAD_AFTER` | Remove unconfirmed upload records and objects after | `PT24H` |
+
+The complete reference is in [.env.example](.env.example) and [the architecture guide](docs/architecture.md). Never commit populated environment files or pass credentials as Docker build arguments.
+
+## 🐳 Delivery
+
+The production image runs as UID `10001`, includes an explicit health check, and supports both `linux/amd64` and `linux/arm64`. GitHub Actions verifies pull requests to `dev` and `prod`; pushes publish immutable branch/SHA tags to GHCR.
+
+Following KStacks GitOps conventions, the final deployment handoff should update `ghcr.io/kstacks-org/devs-service:prod-<short-sha>` in the separate infrastructure repository. That automation is intentionally deferred until the Devs infra manifest and its narrowly scoped `INFRA_PAT` secret exist.
+
+## 🗂️ Repository structure
+
+- `src/main/java/`: content, attachment, media, and security modules
+- `src/main/resources/db/migration/`: append-only Flyway migrations
+- `src/test/`: unit and application-context tests
+- `deploy/kubernetes/`: deployment base and operational notes
+- `docs/`: architecture, planning, and video-pilot documentation
+- `tools/telegram-import/`: resumable Telegram migration utility
+
+## 🤝 Contributing
+
+Create work from `dev`, keep migrations append-only, run `mvn verify`, and open a pull request. Production releases merge through `prod`; credentials and environment-specific hosts belong in infrastructure-managed secrets and configuration.

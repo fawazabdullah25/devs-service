@@ -9,6 +9,11 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import org.kstacks.devs.media.domain.MediaAssetEntity;
+import org.kstacks.devs.attachment.domain.UnitAttachmentEntity;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
+import java.util.ArrayList;
+import java.util.List;
 
 import java.util.UUID;
 
@@ -44,6 +49,10 @@ public class ContentUnitEntity {
     @Column(name = "summary_ar", length = 600)
     private String summaryAr;
 
+    @OneToMany(mappedBy = "unit", fetch = FetchType.LAZY)
+    @OrderBy("position ASC")
+    private List<UnitAttachmentEntity> attachments = new ArrayList<>();
+
     protected ContentUnitEntity() {}
 
     public ContentUnitEntity(String slug, int position, String titleEn, String titleAr, String summaryEn, String summaryAr, MediaAssetEntity media) {
@@ -67,4 +76,5 @@ public class ContentUnitEntity {
     public String getTitleAr() { return titleAr; }
     public String getSummaryEn() { return summaryEn; }
     public String getSummaryAr() { return summaryAr; }
+    public List<UnitAttachmentEntity> getAttachments() { return List.copyOf(attachments); }
 }

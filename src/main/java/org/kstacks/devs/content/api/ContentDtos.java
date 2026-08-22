@@ -10,6 +10,7 @@ import org.kstacks.devs.content.domain.PublicationStatus;
 import org.kstacks.devs.content.domain.SpokenLanguage;
 import org.kstacks.devs.media.domain.MediaProvider;
 import org.kstacks.devs.media.domain.MediaStatus;
+import org.kstacks.devs.attachment.api.AttachmentDtos;
 
 import java.time.Instant;
 import java.net.URI;
@@ -40,7 +41,8 @@ public final class ContentDtos {
         int position,
         LocalizedText title,
         LocalizedText summary,
-        MediaAsset media
+        MediaAsset media,
+        List<AttachmentDtos.Attachment> attachments
     ) {}
     public record LearningContent(
         UUID id,
