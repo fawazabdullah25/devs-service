@@ -123,9 +123,22 @@ public class ContentService {
         }
         var media = mediaRepository.findById(request.mediaId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found"));
-        content.addUnit(new ContentUnitEntity(
+        var section = request.sectionId() == null ? null : content.getSections().stream()
+            .filter(candidate -> candidate.getId().equals(request.sectionId()))
+            .findFirst()
+            .orElseThrow(() -> badRequest("Section does not belong to this series"));
+        if (content.getKind() == ContentKind.COURSE && section != null) {
+            throw badRequest("Courses cannot contain sections");
+        }
+        if (content.getKind() == ContentKind.SERIES && content.getStatus() == PublicationStatus.PUBLISHED
+            && !content.getSections().isEmpty() && section == null) {
+            throw badRequest("Published sectioned series require a destination section");
+        }
+        var unit = new ContentUnitEntity(
             request.slug(), request.position(), request.title().trim(), request.titleAr(), request.summary(), request.summaryAr(), media
-        ));
+        );
+        unit.organize(section, request.position());
+        content.addUnit(unit);
         return mapper.toDto(content);
     }
 
@@ -135,6 +148,16 @@ public class ContentService {
         if (content.getUnits().isEmpty()) throw badRequest("At least one learning unit is required");
         if (content.getKind() == ContentKind.COURSE && content.getUnits().size() != 1) throw badRequest("A course must contain exactly one unit");
         if (content.getKind() == ContentKind.SERIES && content.getUnits().size() < 2) throw badRequest("A series must contain at least two units");
+        if (content.getKind() == ContentKind.COURSE && !content.getSections().isEmpty()) throw badRequest("Courses cannot contain sections");
+        if (content.getKind() == ContentKind.SERIES && !content.getSections().isEmpty()) {
+            if (content.getUnits().stream().anyMatch(unit -> unit.getSection() == null)) {
+                throw badRequest("Every lesson must belong to a section before publishing");
+            }
+            if (content.getSections().stream().anyMatch(section -> content.getUnits().stream()
+                .noneMatch(unit -> section.equals(unit.getSection())))) {
+                throw badRequest("Every section must contain at least one lesson before publishing");
+            }
+        }
         if (content.getUnits().stream().anyMatch(unit -> unit.getMedia() == null || unit.getMedia().getStatus() != MediaStatus.READY)) {
             throw badRequest("Every unit must have ready media before publishing");
         }

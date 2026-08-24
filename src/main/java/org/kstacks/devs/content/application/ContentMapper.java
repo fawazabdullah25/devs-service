@@ -1,17 +1,18 @@
 package org.kstacks.devs.content.application;
 
+import org.kstacks.devs.attachment.application.AttachmentService;
+import org.kstacks.devs.attachment.domain.AttachmentStatus;
 import org.kstacks.devs.content.api.ContentDtos;
+import org.kstacks.devs.content.domain.ContentSectionEntity;
 import org.kstacks.devs.content.domain.ContentUnitEntity;
 import org.kstacks.devs.content.domain.InstructorEntity;
 import org.kstacks.devs.content.domain.LearningContentEntity;
+import org.kstacks.devs.media.application.StaticHlsLocationResolver;
 import org.kstacks.devs.media.domain.MediaAssetEntity;
 import org.kstacks.devs.media.domain.MediaProvider;
 import org.kstacks.devs.media.domain.MediaStatus;
-import org.kstacks.devs.media.application.StaticHlsLocationResolver;
-import org.kstacks.devs.attachment.application.AttachmentService;
-import org.kstacks.devs.attachment.domain.AttachmentStatus;
-import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
 
@@ -39,14 +40,23 @@ public class ContentMapper {
             .sorted(Comparator.comparing(InstructorEntity::getNameEn))
             .map(this::toDto)
             .toList();
-        var units = entity.getUnits().stream().map(this::toDto).toList();
+        var sections = entity.getSections().stream()
+            .sorted(Comparator.comparingInt(ContentSectionEntity::getPosition))
+            .map(section -> new ContentDtos.ContentSection(
+                section.getId(), section.getPosition(), text(section.getTitleEn(), section.getTitleAr()),
+                nullableText(section.getDescriptionEn(), section.getDescriptionAr())
+            ))
+            .toList();
+        var units = entity.getUnits().stream()
+            .sorted(Comparator.comparingInt(ContentUnitEntity::getPosition))
+            .map(this::toDto).toList();
 
         return new ContentDtos.LearningContent(
             entity.getId(), entity.getSlug(), entity.getKind(), entity.getStatus(), entity.getVisibility(),
             text(entity.getTitleEn(), entity.getTitleAr()),
             text(entity.getSummaryEn(), entity.getSummaryAr()),
             text(entity.getDescriptionEn(), entity.getDescriptionAr()),
-            entity.getSpokenLanguage(), ReferenceCatalog.level(entity.getLevelSlug()), topics, instructors, units,
+            entity.getSpokenLanguage(), ReferenceCatalog.level(entity.getLevelSlug()), topics, instructors, sections, units,
             entity.getCoverUrl(), entity.getFeaturedRank(), entity.getPublishedAt(), entity.getViews(), entity.getWatchedMinutes()
         );
     }
@@ -60,7 +70,8 @@ public class ContentMapper {
 
     private ContentDtos.ContentUnit toDto(ContentUnitEntity unit) {
         return new ContentDtos.ContentUnit(
-            unit.getId(), unit.getSlug(), unit.getPosition(), text(unit.getTitleEn(), unit.getTitleAr()),
+            unit.getId(), unit.getSlug(), unit.getPosition(), unit.getSection() == null ? null : unit.getSection().getId(),
+            text(unit.getTitleEn(), unit.getTitleAr()),
             nullableText(unit.getSummaryEn(), unit.getSummaryAr()), toDto(unit.getMedia()),
             unit.getAttachments().stream()
                 .filter(attachment -> attachment.getStatus() == AttachmentStatus.READY)

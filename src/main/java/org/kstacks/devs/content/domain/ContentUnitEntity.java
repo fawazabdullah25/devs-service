@@ -6,15 +6,16 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToOne;
-import jakarta.persistence.Table;
-import org.kstacks.devs.media.domain.MediaAssetEntity;
-import org.kstacks.devs.attachment.domain.UnitAttachmentEntity;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.OrderBy;
+import jakarta.persistence.Table;
+import org.hibernate.annotations.BatchSize;
+import org.kstacks.devs.attachment.domain.UnitAttachmentEntity;
+import org.kstacks.devs.media.domain.MediaAssetEntity;
+
 import java.util.ArrayList;
 import java.util.List;
-
 import java.util.UUID;
 
 @Entity
@@ -26,6 +27,10 @@ public class ContentUnitEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "content_id", nullable = false)
     private LearningContentEntity content;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "section_id")
+    private ContentSectionEntity section;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "media_id")
@@ -51,6 +56,7 @@ public class ContentUnitEntity {
 
     @OneToMany(mappedBy = "unit", fetch = FetchType.LAZY)
     @OrderBy("position ASC")
+    @BatchSize(size = 50)
     private List<UnitAttachmentEntity> attachments = new ArrayList<>();
 
     protected ContentUnitEntity() {}
@@ -68,7 +74,14 @@ public class ContentUnitEntity {
 
     void attachTo(LearningContentEntity content) { this.content = content; }
 
+    public void organize(ContentSectionEntity section, int position) {
+        this.section = section;
+        this.position = position;
+    }
+
     public UUID getId() { return id; }
+    public LearningContentEntity getContent() { return content; }
+    public ContentSectionEntity getSection() { return section; }
     public MediaAssetEntity getMedia() { return media; }
     public String getSlug() { return slug; }
     public int getPosition() { return position; }

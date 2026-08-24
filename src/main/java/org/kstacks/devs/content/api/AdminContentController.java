@@ -2,11 +2,13 @@ package org.kstacks.devs.content.api;
 
 import jakarta.validation.Valid;
 import org.kstacks.devs.content.application.ContentService;
+import org.kstacks.devs.content.application.CurriculumService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -19,9 +21,11 @@ import java.util.UUID;
 @RequestMapping("/devs/api/v1/admin")
 public class AdminContentController {
     private final ContentService service;
+    private final CurriculumService curriculumService;
 
-    public AdminContentController(ContentService service) {
+    public AdminContentController(ContentService service, CurriculumService curriculumService) {
         this.service = service;
+        this.curriculumService = curriculumService;
     }
 
     @GetMapping("/content")
@@ -49,6 +53,14 @@ public class AdminContentController {
     @ResponseStatus(HttpStatus.CREATED)
     public ContentDtos.LearningContent addUnit(@PathVariable UUID id, @Valid @RequestBody ContentDtos.UnitRequest request) {
         return service.addUnit(id, request);
+    }
+
+    @PutMapping("/content/{id}/curriculum")
+    public ContentDtos.LearningContent replaceCurriculum(
+        @PathVariable UUID id,
+        @Valid @RequestBody ContentDtos.CurriculumRequest request
+    ) {
+        return curriculumService.replace(id, request);
     }
 
     @PostMapping("/content/{id}/publish")

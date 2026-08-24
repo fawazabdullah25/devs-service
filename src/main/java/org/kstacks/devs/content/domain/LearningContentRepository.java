@@ -13,9 +13,12 @@ public interface LearningContentRepository extends JpaRepository<LearningContent
     boolean existsBySlug(String slug);
     long countByStatus(PublicationStatus status);
 
-    @EntityGraph(attributePaths = {"units", "units.media", "units.attachments", "instructors", "topicSlugs"})
+    @EntityGraph(attributePaths = {"units", "units.media", "sections", "instructors", "topicSlugs"})
     Optional<LearningContentEntity> findDetailedBySlug(String slug);
 
-    @EntityGraph(attributePaths = {"units", "units.media", "units.attachments", "instructors", "topicSlugs"})
+    @EntityGraph(attributePaths = {"units", "units.media", "sections", "instructors", "topicSlugs"})
     List<LearningContentEntity> findAllByOrderByUpdatedAtDesc();
+
+    @EntityGraph(attributePaths = {"units", "units.media", "sections", "instructors", "topicSlugs"})
+    Optional<LearningContentEntity> findDetailedById(UUID id);
 }

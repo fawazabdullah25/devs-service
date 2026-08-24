@@ -21,6 +21,7 @@ import jakarta.persistence.Version;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -113,6 +114,10 @@ public class LearningContentEntity {
     @OrderBy("position ASC")
     private List<ContentUnitEntity> units = new ArrayList<>();
 
+    @OneToMany(mappedBy = "content", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("position ASC")
+    private Set<ContentSectionEntity> sections = new LinkedHashSet<>();
+
     protected LearningContentEntity() {}
 
     public static LearningContentEntity draft(String slug, ContentKind kind, ContentVisibility visibility, String title, String summary) {
@@ -145,6 +150,15 @@ public class LearningContentEntity {
         unit.attachTo(this);
         units.add(unit);
     }
+
+    public void addSection(ContentSectionEntity section) {
+        section.attachTo(this);
+        sections.add(section);
+    }
+
+    public void removeSection(ContentSectionEntity section) { sections.remove(section); }
+
+    public void markCurriculumChanged() { updatedAt = Instant.now(); }
 
     public void publish() {
         this.status = PublicationStatus.PUBLISHED;
@@ -186,4 +200,7 @@ public class LearningContentEntity {
     public Set<String> getTopicSlugs() { return Set.copyOf(topicSlugs); }
     public Set<InstructorEntity> getInstructors() { return Set.copyOf(instructors); }
     public List<ContentUnitEntity> getUnits() { return List.copyOf(units); }
+    public List<ContentSectionEntity> getSections() {
+        return sections.stream().sorted(Comparator.comparingInt(ContentSectionEntity::getPosition)).toList();
+    }
 }

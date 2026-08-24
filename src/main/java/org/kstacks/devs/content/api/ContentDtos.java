@@ -4,16 +4,16 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import org.kstacks.devs.attachment.api.AttachmentDtos;
 import org.kstacks.devs.content.domain.ContentKind;
 import org.kstacks.devs.content.domain.ContentVisibility;
 import org.kstacks.devs.content.domain.PublicationStatus;
 import org.kstacks.devs.content.domain.SpokenLanguage;
 import org.kstacks.devs.media.domain.MediaProvider;
 import org.kstacks.devs.media.domain.MediaStatus;
-import org.kstacks.devs.attachment.api.AttachmentDtos;
 
-import java.time.Instant;
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,10 +35,17 @@ public final class ContentDtos {
         MediaProvider provider,
         List<CaptionTrack> captions
     ) {}
+    public record ContentSection(
+        UUID id,
+        int position,
+        LocalizedText title,
+        LocalizedText description
+    ) {}
     public record ContentUnit(
         UUID id,
         String slug,
         int position,
+        UUID sectionId,
         LocalizedText title,
         LocalizedText summary,
         MediaAsset media,
@@ -57,6 +64,7 @@ public final class ContentDtos {
         Level level,
         List<Topic> topics,
         List<Instructor> instructors,
+        List<ContentSection> sections,
         List<ContentUnit> units,
         String coverUrl,
         Integer featuredRank,
@@ -102,6 +110,21 @@ public final class ContentDtos {
         @Size(max = 240) String titleAr,
         @Size(max = 600) String summary,
         @Size(max = 600) String summaryAr,
-        @NotNull UUID mediaId
+        @NotNull UUID mediaId,
+        UUID sectionId
+    ) {}
+
+    public record CurriculumSectionRequest(
+        UUID id,
+        @NotBlank @Size(max = 240) String title,
+        @Size(max = 240) String titleAr,
+        @Size(max = 600) String description,
+        @Size(max = 600) String descriptionAr,
+        @NotNull List<@NotNull UUID> unitIds
+    ) {}
+
+    public record CurriculumRequest(
+        @NotNull List<@jakarta.validation.Valid CurriculumSectionRequest> sections,
+        @NotNull List<@NotNull UUID> unsectionedUnitIds
     ) {}
 }

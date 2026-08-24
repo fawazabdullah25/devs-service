@@ -5,6 +5,7 @@ The backend for **KStack Devs**, KStack's free learning platform for practical t
 ## ✨ Features
 
 - Course and series catalog with Arabic and English metadata
+- Optional bilingual sections with ordered lessons for longer series
 - Draft, publication, archive, and future-ready visibility policies
 - Validated static HLS playback with WebVTT captions
 - Direct-to-R2 lesson attachment uploads with size and type enforcement
@@ -53,6 +54,7 @@ docker compose up --build
 |---|---|
 | `/devs/api/v1/public/**` | Published home, catalog, and content responses |
 | `/devs/api/v1/admin/content/**` | Content metadata and publication operations |
+| `PUT /devs/api/v1/admin/content/{id}/curriculum` | Atomically replace a series section and lesson order |
 | `/devs/api/v1/admin/media/**` | HLS registration and legacy media ingestion |
 | `/devs/api/v1/admin/units/{unitId}/attachments/**` | Attachment upload, confirmation, deletion, restore, and ordering |
 | `/devs/api/v1/webhooks/mux` | Signature-verified legacy Mux events |
@@ -75,6 +77,14 @@ The initial policy accepts PDF, ZIP, Office documents, plain text, Markdown, com
 Because the chosen R2 custom domain is public, attachment URLs are public too. Keep `attachments/` on a dedicated media origin and never store private student information there. A future authenticated-download policy should use a private bucket or signed downloads rather than CORS as access control.
 
 R2 CORS must allow the frontend origins, `PUT` and `GET`, and the `Content-Type` and `Content-Disposition` request headers.
+
+## 🗂️ Series curricula
+
+A series may remain flat or contain one level of ordered sections. Each section has a required English title plus optional Arabic title and bilingual descriptions. Lessons retain one global position for playback order and may additionally reference a section; the API exposes both the ordered `sections` list and each unit's `sectionId`.
+
+The curriculum replacement endpoint accepts the complete section tree and the remaining unsectioned lesson IDs in one request. It validates ownership and uniqueness before changing anything, then applies section order, lesson membership, and global lesson positions in one database transaction. Omitting a section deletes only the section and preserves its lessons when the client places them in `unsectionedUnitIds`.
+
+Flat published series remain valid. Once a published series uses sections, every lesson must belong to exactly one non-empty section. This invariant is enforced both when saving the curriculum and when adding or publishing content.
 
 ## 🎬 Static HLS
 
