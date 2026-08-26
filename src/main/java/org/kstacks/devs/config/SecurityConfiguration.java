@@ -1,5 +1,6 @@
 package org.kstacks.devs.config;
 
+import jakarta.servlet.DispatcherType;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.jwk.Curve;
 import com.nimbusds.jose.jwk.ECKey;
@@ -41,7 +42,7 @@ public class SecurityConfiguration {
     CorsConfigurationSource corsConfigurationSource(WebProperties properties) {
         var configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(properties.allowedOrigins());
-        configuration.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "If-Match"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
@@ -60,46 +61,55 @@ public class SecurityConfiguration {
             }
             try {
                 var encodedKey = properties.publicKey()
-                    .replace("-----BEGIN PUBLIC KEY-----", "")
-                    .replace("-----END PUBLIC KEY-----", "")
-                    .replaceAll("\\s", "");
+                        .replace("-----BEGIN PUBLIC KEY-----", "")
+                        .replace("-----END PUBLIC KEY-----", "")
+                        .replaceAll("\\s", "");
                 var keySpec = new X509EncodedKeySpec(Base64.getDecoder().decode(encodedKey));
                 var publicKey = (ECPublicKey) KeyFactory.getInstance("EC").generatePublic(keySpec);
                 var jwk = new ECKey.Builder(Curve.P_256, publicKey)
-                    .algorithm(JWSAlgorithm.ES256)
-                    .keyID("access")
-                    .build();
+                        .algorithm(JWSAlgorithm.ES256)
+                        .keyID("access")
+                        .build();
                 var decoder = NimbusJwtDecoder
-                    .withJwkSource(new ImmutableJWKSet<SecurityContext>(new JWKSet(jwk)))
-                    .jwsAlgorithm(SignatureAlgorithm.ES256)
-                    .build();
+                        .withJwkSource(new ImmutableJWKSet<SecurityContext>(new JWKSet(jwk)))
+                        .jwsAlgorithm(SignatureAlgorithm.ES256)
+                        .build();
                 if (!properties.issuer().isBlank()) {
                     decoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(properties.issuer()));
                 }
                 return decoder;
             } catch (Exception exception) {
-                throw new IllegalStateException("DEVS_JWT_PUBLIC_KEY must be an ES256 X.509 public key in Base64 or PEM form", exception);
+                throw new IllegalStateException(
+                        "DEVS_JWT_PUBLIC_KEY must be an ES256 X.509 public key in Base64 or PEM form", exception);
             }
         }
 
         @Bean
         SecurityFilterChain jwtFilterChain(
-            HttpSecurity http,
-            SecurityProperties properties,
-            @Qualifier("corsConfigurationSource") CorsConfigurationSource cors
-        ) throws Exception {
+                HttpSecurity http,
+                SecurityProperties properties,
+                @Qualifier("corsConfigurationSource") CorsConfigurationSource cors) throws Exception {
             var adminAuthorities = properties.adminRoles().stream()
-                .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
-                .toArray(String[]::new);
+                    .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
+                    .toArray(String[]::new);
             http
-                .csrf(csrf -> csrf.disable())
-                .cors(configurer -> configurer.configurationSource(cors))
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                    .requestMatchers("/actuator/health/**", "/devs/api/v1/public/**", "/devs/api/v1/webhooks/mux").permitAll()
-                    .requestMatchers("/devs/api/v1/admin/**").hasAnyAuthority(adminAuthorities)
-                    .anyRequest().authenticated())
-                .oauth2ResourceServer(resource -> resource.jwt(jwt -> jwt.jwtAuthenticationConverter(new RolesConverter(properties))));
+                    .csrf(csrf -> csrf.disable())
+                    .cors(configurer -> configurer.configurationSource(cors))
+                    .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                    .authorizeHttpRequests(auth -> auth
+                            .dispatcherTypeMatchers(
+                                    DispatcherType.FORWARD,
+                                    DispatcherType.ERROR)
+                            .permitAll()
+                            .requestMatchers(
+                                    "/actuator/health/**",
+                                    "/devs/api/v1/public/**",
+                                    "/devs/api/v1/webhooks/mux")
+                            .permitAll()
+                            .requestMatchers("/devs/api/v1/admin/**").hasAnyAuthority(adminAuthorities)
+                            .anyRequest().authenticated())
+                    .oauth2ResourceServer(resource -> resource.jwt(
+                            jwt -> jwt.jwtAuthenticationConverter(new RolesConverter(properties))));
             return http.build();
         }
     }
@@ -109,21 +119,33 @@ public class SecurityConfiguration {
     static class LockedSecurity {
         @Bean
         SecurityFilterChain lockedFilterChain(
-            HttpSecurity http,
-            SecurityProperties properties,
-            @Qualifier("corsConfigurationSource") CorsConfigurationSource cors
-        ) throws Exception {
+                HttpSecurity http,
+                SecurityProperties properties,
+                @Qualifier("corsConfigurationSource") CorsConfigurationSource cors) throws Exception {
             http
-                .csrf(csrf -> csrf.disable())
-                .cors(configurer -> configurer.configurationSource(cors))
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> {
-                    auth.requestMatchers("/actuator/health/**", "/devs/api/v1/public/**", "/devs/api/v1/webhooks/mux").permitAll();
-                    if (properties.allowInsecureAdmin()) auth.requestMatchers("/devs/api/v1/admin/**").permitAll();
-                    else auth.requestMatchers("/devs/api/v1/admin/**").denyAll();
-                    auth.anyRequest().denyAll();
-                })
-                .httpBasic(Customizer.withDefaults());
+                    .csrf(csrf -> csrf.disable())
+                    .cors(configurer -> configurer.configurationSource(cors))
+                    .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                    .authorizeHttpRequests(auth -> {
+                        auth.dispatcherTypeMatchers(
+                                DispatcherType.FORWARD,
+                                DispatcherType.ERROR).permitAll();
+
+                        auth.requestMatchers(
+                                "/actuator/health/**",
+                                "/devs/api/v1/public/**",
+                                "/devs/api/v1/webhooks/mux").permitAll();
+
+                        if (properties.allowInsecureAdmin()) {
+                            auth.requestMatchers("/devs/api/v1/admin/**").permitAll();
+                        } else {
+                            auth.requestMatchers("/devs/api/v1/admin/**").denyAll();
+                        }
+
+                        auth.anyRequest().denyAll();
+                    })
+                    .httpBasic(httpBasic -> httpBasic.disable())
+                    .formLogin(form -> form.disable());
             return http.build();
         }
     }
@@ -146,9 +168,9 @@ public class SecurityConfiguration {
             var scopes = jwt.getClaimAsString("scope");
             if (scopes != null) {
                 scopes.lines().flatMap(line -> List.of(line.split(" ")).stream())
-                    .filter(scope -> !scope.isBlank())
-                    .map(scope -> new SimpleGrantedAuthority("SCOPE_" + scope))
-                    .forEach(authorities::add);
+                        .filter(scope -> !scope.isBlank())
+                        .map(scope -> new SimpleGrantedAuthority("SCOPE_" + scope))
+                        .forEach(authorities::add);
             }
             if (properties.adminSubjects().contains(jwt.getSubject())) {
                 addRoles(authorities, properties.adminRoles());
@@ -157,11 +179,12 @@ public class SecurityConfiguration {
         }
 
         private void addRoles(List<SimpleGrantedAuthority> authorities, Collection<String> roles) {
-            if (roles == null) return;
+            if (roles == null)
+                return;
             roles.stream().filter(role -> role != null && !role.isBlank())
-                .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
-                .map(SimpleGrantedAuthority::new)
-                .forEach(authorities::add);
+                    .map(role -> role.startsWith("ROLE_") ? role : "ROLE_" + role)
+                    .map(SimpleGrantedAuthority::new)
+                    .forEach(authorities::add);
         }
     }
 }
