@@ -32,7 +32,7 @@ public class CurriculumService {
     @Transactional
     public ContentDtos.LearningContent replace(UUID contentId, ContentDtos.CurriculumRequest request) {
         var content = repository.findDetailedById(contentId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found"));
         if (content.getKind() != ContentKind.SERIES) {
             throw badRequest("Only series can contain sections");
         }
@@ -46,32 +46,53 @@ public class CurriculumService {
         validateSectionIds(request, existingSections);
         validatePublishedCurriculum(content.getStatus(), request);
 
-        var temporaryPosition = -1;
-        for (var unit : content.getUnits()) unit.organize(null, temporaryPosition--);
-        temporaryPosition = -1;
-        for (var section : content.getSections()) section.moveTo(temporaryPosition--);
+        var temporaryUnitPosition = Math.max(
+                content.getUnits().stream()
+                        .mapToInt(ContentUnitEntity::getPosition)
+                        .max()
+                        .orElse(0),
+                content.getUnits().size()) + 1;
+
+        for (var unit : content.getUnits()) {
+            unit.organize(null, temporaryUnitPosition++);
+        }
+
+        var temporarySectionPosition = Math.max(
+                content.getSections().stream()
+                        .mapToInt(ContentSectionEntity::getPosition)
+                        .max()
+                        .orElse(0),
+                request.sections().size()) + 1;
+
+        for (var section : content.getSections()) {
+            section.moveTo(temporarySectionPosition++);
+        }
+
         entityManager.flush();
 
         var retainedSectionIds = new HashSet<UUID>();
         request.sections().stream()
-            .map(ContentDtos.CurriculumSectionRequest::id)
-            .filter(java.util.Objects::nonNull)
-            .forEach(retainedSectionIds::add);
+                .map(ContentDtos.CurriculumSectionRequest::id)
+                .filter(java.util.Objects::nonNull)
+                .forEach(retainedSectionIds::add);
         content.getSections().stream()
-            .filter(section -> !retainedSectionIds.contains(section.getId()))
-            .toList()
-            .forEach(content::removeSection);
+                .filter(section -> !retainedSectionIds.contains(section.getId()))
+                .toList()
+                .forEach(content::removeSection);
 
         var globalPosition = 1;
         for (var sectionIndex = 0; sectionIndex < request.sections().size(); sectionIndex++) {
             var sectionRequest = request.sections().get(sectionIndex);
             var section = sectionRequest.id() == null
-                ? new ContentSectionEntity(sectionIndex + 1, sectionRequest.title().trim(), clean(sectionRequest.titleAr()),
-                    clean(sectionRequest.description()), clean(sectionRequest.descriptionAr()))
-                : existingSections.get(sectionRequest.id());
-            if (sectionRequest.id() == null) content.addSection(section);
-            else section.update(sectionIndex + 1, sectionRequest.title().trim(), clean(sectionRequest.titleAr()),
-                clean(sectionRequest.description()), clean(sectionRequest.descriptionAr()));
+                    ? new ContentSectionEntity(sectionIndex + 1, sectionRequest.title().trim(),
+                            clean(sectionRequest.titleAr()),
+                            clean(sectionRequest.description()), clean(sectionRequest.descriptionAr()))
+                    : existingSections.get(sectionRequest.id());
+            if (sectionRequest.id() == null)
+                content.addSection(section);
+            else
+                section.update(sectionIndex + 1, sectionRequest.title().trim(), clean(sectionRequest.titleAr()),
+                        clean(sectionRequest.description()), clean(sectionRequest.descriptionAr()));
 
             for (var unitId : sectionRequest.unitIds()) {
                 units.get(unitId).organize(section, globalPosition++);
@@ -96,22 +117,27 @@ public class CurriculumService {
     }
 
     private void addUnitId(UUID id, HashSet<UUID> supplied, Map<UUID, ContentUnitEntity> units) {
-        if (!units.containsKey(id)) throw badRequest("Curriculum contains a lesson that does not belong to this series");
-        if (!supplied.add(id)) throw badRequest("A lesson cannot appear more than once in the curriculum");
+        if (!units.containsKey(id))
+            throw badRequest("Curriculum contains a lesson that does not belong to this series");
+        if (!supplied.add(id))
+            throw badRequest("A lesson cannot appear more than once in the curriculum");
     }
 
     private void validateSectionIds(ContentDtos.CurriculumRequest request, Map<UUID, ContentSectionEntity> existing) {
         var supplied = new HashSet<UUID>();
         request.sections().stream().map(ContentDtos.CurriculumSectionRequest::id)
-            .filter(java.util.Objects::nonNull)
-            .forEach(id -> {
-                if (!existing.containsKey(id)) throw badRequest("Curriculum contains a section that does not belong to this series");
-                if (!supplied.add(id)) throw badRequest("A section cannot appear more than once in the curriculum");
-            });
+                .filter(java.util.Objects::nonNull)
+                .forEach(id -> {
+                    if (!existing.containsKey(id))
+                        throw badRequest("Curriculum contains a section that does not belong to this series");
+                    if (!supplied.add(id))
+                        throw badRequest("A section cannot appear more than once in the curriculum");
+                });
     }
 
     private void validatePublishedCurriculum(PublicationStatus status, ContentDtos.CurriculumRequest request) {
-        if (status != PublicationStatus.PUBLISHED || request.sections().isEmpty()) return;
+        if (status != PublicationStatus.PUBLISHED || request.sections().isEmpty())
+            return;
         if (!request.unsectionedUnitIds().isEmpty()) {
             throw badRequest("Published sectioned series cannot contain unsectioned lessons");
         }
@@ -121,7 +147,8 @@ public class CurriculumService {
     }
 
     private String clean(String value) {
-        if (value == null || value.isBlank()) return null;
+        if (value == null || value.isBlank())
+            return null;
         return value.trim();
     }
 
