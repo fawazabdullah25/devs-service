@@ -14,5 +14,9 @@ public class UnavailableObjectStorage implements ObjectStorage {
     @Override public UploadGrant signUpload(String objectKey, String contentType, long contentLength) { throw unavailable(); }
     @Override public URI signDownload(String objectKey) { throw unavailable(); }
     @Override public boolean exists(String objectKey) { throw unavailable(); }
+    @Override public long size(String objectKey) { throw unavailable(); }
+    @Override public void delete(String objectKey) { throw unavailable(); }
+    @Override public java.util.List<String> list(String prefix) { throw unavailable(); }
+    @Override public void deletePrefix(String prefix) { throw unavailable(); }
     private ResponseStatusException unavailable() { return new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "R2 is not configured"); }
 }

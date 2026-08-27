@@ -5,6 +5,7 @@ import org.kstacks.devs.attachment.domain.AttachmentStatus;
 import org.kstacks.devs.attachment.domain.UnitAttachmentEntity;
 import org.kstacks.devs.attachment.domain.UnitAttachmentRepository;
 import org.kstacks.devs.config.AttachmentProperties;
+import org.kstacks.devs.content.domain.ContentUnitEntity;
 import org.kstacks.devs.content.domain.ContentUnitRepository;
 import org.kstacks.devs.media.application.ObjectStorage;
 import org.springframework.http.HttpStatus;
@@ -42,6 +43,7 @@ public class AttachmentService {
     @Transactional
     public AttachmentDtos.UploadGrant requestUpload(UUID unitId, AttachmentDtos.UploadRequest request) {
         var unit = units.findById(unitId).orElseThrow(() -> notFound("Lesson not found"));
+        ensureMutableUnit(unit);
         if (attachments.countByUnitIdAndStatusNot(unitId, AttachmentStatus.DELETED) >= properties.maxPerUnit()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This lesson has reached its attachment limit");
         }
@@ -68,6 +70,7 @@ public class AttachmentService {
     @Transactional
     public AttachmentDtos.Attachment complete(UUID unitId, UUID attachmentId) {
         var attachment = findOwned(unitId, attachmentId);
+        ensureMutableUnit(attachment.getUnit());
         if (attachment.getStatus() != AttachmentStatus.UPLOADING) throw conflict("Attachment is not awaiting upload confirmation");
         if (!storage.exists(attachment.getObjectKey())) throw conflict("Attachment upload is not complete");
         var actualSize = storage.size(attachment.getObjectKey());
@@ -81,6 +84,7 @@ public class AttachmentService {
     @Transactional
     public AttachmentDtos.Attachment update(UUID unitId, UUID attachmentId, AttachmentDtos.UpdateRequest request) {
         var attachment = findOwned(unitId, attachmentId);
+        ensureMutableUnit(attachment.getUnit());
         if (attachment.getStatus() != AttachmentStatus.READY) throw conflict("Only ready attachments can be edited");
         attachment.update(request.title().trim(), clean(request.titleAr()), request.position());
         return toDto(attachment);
@@ -89,6 +93,7 @@ public class AttachmentService {
     @Transactional
     public void delete(UUID unitId, UUID attachmentId) {
         var attachment = findOwned(unitId, attachmentId);
+        ensureMutableUnit(attachment.getUnit());
         if (attachment.getStatus() == AttachmentStatus.DELETED) return;
         attachment.softDelete(properties.retention());
     }
@@ -96,6 +101,7 @@ public class AttachmentService {
     @Transactional
     public AttachmentDtos.Attachment restore(UUID unitId, UUID attachmentId) {
         var attachment = findOwned(unitId, attachmentId);
+        ensureMutableUnit(attachment.getUnit());
         if (attachment.getStatus() != AttachmentStatus.DELETED) throw conflict("Attachment is not deleted");
         attachment.restore();
         return toDto(attachment);
@@ -103,14 +109,16 @@ public class AttachmentService {
 
     @Transactional(readOnly = true)
     public java.util.List<AttachmentDtos.Attachment> deleted(UUID unitId) {
-        if (!units.existsById(unitId)) throw notFound("Lesson not found");
+        var unit = units.findById(unitId).orElseThrow(() -> notFound("Lesson not found"));
+        ensureMutableUnit(unit);
         return attachments.findByUnitIdAndStatusOrderByPosition(unitId, AttachmentStatus.DELETED)
             .stream().map(this::toDto).toList();
     }
 
     @Transactional
     public java.util.List<AttachmentDtos.Attachment> reorder(UUID unitId, AttachmentDtos.OrderRequest request) {
-        if (!units.existsById(unitId)) throw notFound("Lesson not found");
+        var unit = units.findById(unitId).orElseThrow(() -> notFound("Lesson not found"));
+        ensureMutableUnit(unit);
         var ready = attachments.findByUnitIdAndStatusOrderByPosition(unitId, AttachmentStatus.READY);
         if (ready.size() != request.attachmentIds().size() || !ready.stream().map(UnitAttachmentEntity::getId).collect(java.util.stream.Collectors.toSet())
             .equals(Set.copyOf(request.attachmentIds()))) throw badRequest("Order must contain every ready attachment exactly once");
@@ -133,6 +141,13 @@ public class AttachmentService {
         var entity = attachments.findById(attachmentId).orElseThrow(() -> notFound("Attachment not found"));
         if (!entity.getUnit().getId().equals(unitId)) throw notFound("Attachment not found");
         return entity;
+    }
+
+    private void ensureMutableUnit(ContentUnitEntity unit) {
+        if (unit.isDeleted() || unit.isPurgeClaimed() || unit.getContent() == null ||
+            unit.getContent().isDeleted() || unit.getContent().isPurgeClaimed()) {
+            throw conflict("Trashed lesson content cannot be changed");
+        }
     }
     private String normalizedFilename(String value) {
         var leaf = value.replace('\\', '/'); leaf = leaf.substring(leaf.lastIndexOf('/') + 1).trim();

@@ -7,6 +7,7 @@ import org.kstacks.devs.content.domain.ContentSectionEntity;
 import org.kstacks.devs.content.domain.ContentUnitEntity;
 import org.kstacks.devs.content.domain.InstructorEntity;
 import org.kstacks.devs.content.domain.LearningContentEntity;
+import org.kstacks.devs.media.application.CoverService;
 import org.kstacks.devs.media.application.StaticHlsLocationResolver;
 import org.kstacks.devs.media.domain.MediaAssetEntity;
 import org.kstacks.devs.media.domain.MediaProvider;
@@ -20,15 +21,25 @@ import java.util.Comparator;
 public class ContentMapper {
     private final StaticHlsLocationResolver staticHlsLocations;
     private final AttachmentService attachmentService;
+    private final CoverService coverService;
 
     @Autowired
-    public ContentMapper(StaticHlsLocationResolver staticHlsLocations, AttachmentService attachmentService) {
+    public ContentMapper(
+        StaticHlsLocationResolver staticHlsLocations,
+        AttachmentService attachmentService,
+        CoverService coverService
+    ) {
         this.staticHlsLocations = staticHlsLocations;
         this.attachmentService = attachmentService;
+        this.coverService = coverService;
+    }
+
+    ContentMapper(StaticHlsLocationResolver staticHlsLocations, AttachmentService attachmentService) {
+        this(staticHlsLocations, attachmentService, null);
     }
 
     ContentMapper(StaticHlsLocationResolver staticHlsLocations) {
-        this(staticHlsLocations, null);
+        this(staticHlsLocations, null, null);
     }
 
     public ContentDtos.LearningContent toDto(LearningContentEntity entity) {
@@ -47,7 +58,7 @@ public class ContentMapper {
                 nullableText(section.getDescriptionEn(), section.getDescriptionAr())
             ))
             .toList();
-        var units = entity.getUnits().stream()
+        var units = entity.getActiveUnits().stream()
             .sorted(Comparator.comparingInt(ContentUnitEntity::getPosition))
             .map(this::toDto).toList();
 
@@ -57,7 +68,15 @@ public class ContentMapper {
             text(entity.getSummaryEn(), entity.getSummaryAr()),
             text(entity.getDescriptionEn(), entity.getDescriptionAr()),
             entity.getSpokenLanguage(), ReferenceCatalog.level(entity.getLevelSlug()), topics, instructors, sections, units,
-            entity.getCoverUrl(), entity.getFeaturedRank(), entity.getPublishedAt(), entity.getViews(), entity.getWatchedMinutes()
+            coverUrl(entity), entity.getFeaturedRank(), entity.getPublishedAt(), entity.getViews(), entity.getWatchedMinutes(),
+            entity.getDeletedAt(), entity.getPurgeAfter()
+        );
+    }
+
+    public ContentDtos.InstructorProfile toProfile(InstructorEntity instructor) {
+        return new ContentDtos.InstructorProfile(
+            instructor.getId(), instructor.getNameEn(), instructor.getNameAr(), instructor.getBioEn(), instructor.getBioAr(),
+            instructor.getInitials(), instructor.getAvatarUrl(), instructor.getAccountSubject()
         );
     }
 
@@ -68,17 +87,21 @@ public class ContentMapper {
         );
     }
 
-    private ContentDtos.ContentUnit toDto(ContentUnitEntity unit) {
+    public ContentDtos.ContentUnit toUnitDto(ContentUnitEntity unit) {
         return new ContentDtos.ContentUnit(
             unit.getId(), unit.getSlug(), unit.getPosition(), unit.getSection() == null ? null : unit.getSection().getId(),
             text(unit.getTitleEn(), unit.getTitleAr()),
             nullableText(unit.getSummaryEn(), unit.getSummaryAr()), toDto(unit.getMedia()),
             unit.getAttachments().stream()
                 .filter(attachment -> attachment.getStatus() == AttachmentStatus.READY)
-                .map(attachmentService::toDto)
-                .toList()
+                .map(attachment -> attachmentService == null ? null : attachmentService.toDto(attachment))
+                .filter(java.util.Objects::nonNull)
+                .toList(),
+            unit.getDeletedAt(), unit.getPurgeAfter()
         );
     }
+
+    private ContentDtos.ContentUnit toDto(ContentUnitEntity unit) { return toUnitDto(unit); }
 
     ContentDtos.MediaAsset toDto(MediaAssetEntity media) {
         if (media == null) {
@@ -97,8 +120,14 @@ public class ContentMapper {
             .toList();
         return new ContentDtos.MediaAsset(
             media.getId(), media.getStatus(), media.getDurationSeconds(), media.getPlaybackId(), playbackUrl, null,
-            media.getProvider(), captions
+            media.getProvider(), captions, media.getEncodingVersion(), media.getPlaybackPath(), media.getUpdatedAt()
         );
+    }
+
+    private String coverUrl(LearningContentEntity entity) {
+        if (coverService == null) return entity.getCoverUrl();
+        var active = coverService.resolveActiveUrl(entity.getId());
+        return active == null ? entity.getCoverUrl() : active.toString();
     }
 
     private ContentDtos.LocalizedText text(String en, String ar) {

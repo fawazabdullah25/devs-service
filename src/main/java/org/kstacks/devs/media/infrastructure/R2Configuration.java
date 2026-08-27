@@ -40,8 +40,16 @@ public class R2Configuration {
 
     @Bean
     @ConditionalOnProperty(name = "devs.r2.enabled", havingValue = "true")
-    ObjectStorage r2ObjectStorage(S3Client client, S3Presigner presigner, R2Properties r2, org.kstacks.devs.config.MediaProperties media) {
-        return new R2ObjectStorage(client, presigner, r2.bucket(), media.uploadExpiryMinutes());
+    ObjectStorage r2ObjectStorage(
+        S3Client client,
+        S3Presigner presigner,
+        R2Properties r2,
+        org.kstacks.devs.config.MediaProperties media,
+        org.kstacks.devs.config.StaticHlsProperties staticHls
+    ) {
+        return new R2ObjectStorage(
+            client, presigner, r2.bucket(), media.uploadExpiryMinutes(), staticHls.allowedPathPrefix()
+        );
     }
 
     private StaticCredentialsProvider credentials(R2Properties properties) {

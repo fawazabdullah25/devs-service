@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import org.kstacks.devs.media.domain.MediaProvider;
+import org.kstacks.devs.media.domain.MediaStatus;
 
 import java.net.URI;
 import java.time.Instant;
@@ -73,6 +75,92 @@ public final class MediaDtos {
         URI playbackUrl,
         long durationSeconds,
         List<CaptionTrackResponse> captions,
-        String errorMessage
+        String errorMessage,
+        String playbackPath,
+        String encodingVersion,
+        String checksumSha256,
+        Instant createdAt,
+        Instant updatedAt,
+        Instant deletedAt,
+        Instant purgeAfter,
+        UUID retainedForUnitId,
+        CurrentAttachment currentAttachment
     ) {}
+
+    public record CurrentAttachment(
+        UUID contentId,
+        String contentTitle,
+        UUID unitId,
+        String unitTitle
+    ) {}
+
+    public record MediaLibraryItem(
+        UUID mediaId,
+        MediaProvider provider,
+        MediaStatus status,
+        String providerAssetId,
+        String playbackId,
+        String playbackPath,
+        URI playbackUrl,
+        long durationSeconds,
+        String encodingVersion,
+        String checksumSha256,
+        List<CaptionTrackResponse> captions,
+        Instant createdAt,
+        Instant updatedAt,
+        Instant deletedAt,
+        Instant purgeAfter,
+        UUID retainedForUnitId,
+        CurrentAttachment currentAttachment
+    ) {}
+
+    public record MediaReplacementRequest(@jakarta.validation.constraints.NotNull UUID mediaId) {}
+
+    public record MediaVersion(
+        UUID mediaId,
+        boolean current,
+        MediaProvider provider,
+        MediaStatus status,
+        String providerAssetId,
+        String playbackId,
+        String playbackPath,
+        URI playbackUrl,
+        long durationSeconds,
+        String encodingVersion,
+        String checksumSha256,
+        List<CaptionTrackResponse> captions,
+        Instant createdAt,
+        Instant updatedAt,
+        Instant deletedAt,
+        Instant purgeAfter
+    ) {}
+
+    public record CoverUploadRequest(
+        @NotBlank @Size(max = 255) String filename,
+        @NotBlank @Size(max = 160) String contentType,
+        @Positive long contentLength
+    ) {}
+
+    public record Cover(
+        UUID id,
+        String filename,
+        String contentType,
+        long contentLength,
+        String status,
+        URI url,
+        Instant createdAt,
+        Instant updatedAt,
+        Instant deletedAt,
+        Instant purgeAfter
+    ) {}
+
+    public record CoverUploadGrant(
+        Cover cover,
+        URI uploadUrl,
+        String objectKey,
+        Map<String, String> headers,
+        Instant expiresAt
+    ) {}
+
+    public record CoverCompleteRequest(@jakarta.validation.constraints.NotNull UUID coverId) {}
 }

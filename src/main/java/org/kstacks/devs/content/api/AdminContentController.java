@@ -5,6 +5,7 @@ import org.kstacks.devs.content.application.ContentService;
 import org.kstacks.devs.content.application.CurriculumService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,6 +34,21 @@ public class AdminContentController {
         return service.adminContent();
     }
 
+    @GetMapping("/content/deleted")
+    public List<ContentDtos.LearningContent> deletedContent() {
+        return service.deletedContent();
+    }
+
+    @GetMapping("/content/{id}")
+    public ContentDtos.LearningContent details(@PathVariable UUID id) {
+        return service.adminDetails(id);
+    }
+
+    @GetMapping("/reference-data")
+    public ContentDtos.ReferenceData referenceData() {
+        return service.referenceData();
+    }
+
     @GetMapping("/analytics/summary")
     public ContentDtos.AdminSummary summary() {
         return service.adminSummary();
@@ -40,12 +56,12 @@ public class AdminContentController {
 
     @PostMapping("/content")
     @ResponseStatus(HttpStatus.CREATED)
-    public ContentDtos.LearningContent create(@Valid @RequestBody ContentDtos.MetadataRequest request) {
+    public ContentDtos.LearningContent create(@Valid @RequestBody ContentDtos.CreateMetadataRequest request) {
         return service.create(request);
     }
 
     @PatchMapping("/content/{id}")
-    public ContentDtos.LearningContent update(@PathVariable UUID id, @Valid @RequestBody ContentDtos.MetadataRequest request) {
+    public ContentDtos.LearningContent update(@PathVariable UUID id, @Valid @RequestBody ContentDtos.UpdateMetadataRequest request) {
         return service.update(id, request);
     }
 
@@ -71,5 +87,44 @@ public class AdminContentController {
     @PostMapping("/content/{id}/archive")
     public ContentDtos.LearningContent archive(@PathVariable UUID id) {
         return service.archive(id);
+    }
+
+    @PostMapping("/content/{id}/unarchive")
+    public ContentDtos.LearningContent unarchive(@PathVariable UUID id) {
+        return service.unarchive(id);
+    }
+
+    @DeleteMapping("/content/{id}")
+    public ContentDtos.LearningContent delete(@PathVariable UUID id) {
+        return service.delete(id);
+    }
+
+    @PostMapping("/content/{id}/restore")
+    public ContentDtos.LearningContent restore(@PathVariable UUID id) {
+        return service.restore(id);
+    }
+
+    @PatchMapping("/content/{contentId}/units/{unitId}")
+    public ContentDtos.LearningContent updateUnit(
+        @PathVariable UUID contentId,
+        @PathVariable UUID unitId,
+        @Valid @RequestBody ContentDtos.UnitUpdateRequest request
+    ) {
+        return service.updateUnit(contentId, unitId, request);
+    }
+
+    @DeleteMapping("/content/{contentId}/units/{unitId}")
+    public ContentDtos.ContentUnit deleteUnit(@PathVariable UUID contentId, @PathVariable UUID unitId) {
+        return service.deleteUnit(contentId, unitId);
+    }
+
+    @GetMapping("/content/{contentId}/units/deleted")
+    public List<ContentDtos.ContentUnit> deletedUnits(@PathVariable UUID contentId) {
+        return service.deletedUnits(contentId);
+    }
+
+    @PostMapping("/content/{contentId}/units/{unitId}/restore")
+    public ContentDtos.ContentUnit restoreUnit(@PathVariable UUID contentId, @PathVariable UUID unitId) {
+        return service.restoreUnit(contentId, unitId);
     }
 }

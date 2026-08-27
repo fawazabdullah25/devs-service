@@ -7,7 +7,11 @@ The backend for **KStack Devs**, KStack's free learning platform for practical t
 - Course and series catalog with Arabic and English metadata
 - Optional bilingual sections with ordered lessons for longer series
 - Draft, publication, archive, and future-ready visibility policies
+- Reusable instructor profiles and complete bilingual content metadata editing
+- Seven-day content, lesson, and media trash with restore and safe object cleanup
+- Thirty-day lesson video version history with rollback
 - Validated static HLS playback with WebVTT captions
+- Direct-to-R2 cover image uploads for JPEG, PNG, WebP, and AVIF
 - Direct-to-R2 lesson attachment uploads with size and type enforcement
 - Seven-day attachment deletion retention and automatic object cleanup
 - Optional legacy R2-to-Mux ingestion path
@@ -53,9 +57,10 @@ docker compose up --build
 | Prefix | Purpose |
 |---|---|
 | `/devs/api/v1/public/**` | Published home, catalog, and content responses |
-| `/devs/api/v1/admin/content/**` | Content metadata and publication operations |
+| `/devs/api/v1/admin/content/**` | Content metadata, lesson, cover, trash, and publication operations |
 | `PUT /devs/api/v1/admin/content/{id}/curriculum` | Atomically replace a series section and lesson order |
-| `/devs/api/v1/admin/media/**` | HLS registration and legacy media ingestion |
+| `/devs/api/v1/admin/instructors/**` | Reusable instructor profile management |
+| `/devs/api/v1/admin/media/**` | Media library, trash, HLS registration, and legacy ingestion |
 | `/devs/api/v1/admin/units/{unitId}/attachments/**` | Attachment upload, confirmation, deletion, restore, and ordering |
 | `/devs/api/v1/webhooks/mux` | Signature-verified legacy Mux events |
 | `/actuator/health/liveness` | Container and Kubernetes liveness probe |
@@ -90,6 +95,8 @@ Flat published series remain valid. Once a published series uses sections, every
 
 Set `STATIC_HLS_ENABLED=true`, configure `STATIC_HLS_BASE_URL`, and optionally restrict registrations with `STATIC_HLS_ALLOWED_PATH_PREFIX`. `POST /devs/api/v1/admin/media/static-hls` validates the master playlist, every rendition playlist, and every caption track before creating a ready media record. Redirects and host-changing paths are rejected.
 
+In production, `STATIC_HLS_ALLOWED_PATH_PREFIX` must match the dedicated key prefix used by Devs. Purge workers refuse prefix deletion when it is empty or when a manifest falls outside it. The R2 credential therefore needs bucket-scoped object read, write, and delete access; it does not need account-wide or bucket-creation permission.
+
 The database stores relative paths, allowing the CDN hostname to change without rewriting catalog rows. See [the measured R2/HLS pilot](docs/r2-hls-pilot-results.md) and [the reproducible pilot guide](docs/r2-hls-pilot-guide.md).
 
 ## ⚙️ Configuration
@@ -110,6 +117,12 @@ The database stores relative paths, allowing the CDN hostname to change without 
 | `ATTACHMENTS_RETENTION` | Soft-deletion retention | `P7D` |
 | `ATTACHMENTS_PURGE_DELAY` | Cleanup scan interval | `PT1H` |
 | `ATTACHMENTS_STALE_UPLOAD_AFTER` | Remove unconfirmed upload records and objects after | `PT24H` |
+| `DEVS_MEDIA_RETENTION` | Deleted media and cover retention | `P7D` |
+| `DEVS_MEDIA_VERSION_RETENTION` | Replaced lesson-video rollback window | `P30D` |
+| `DEVS_MEDIA_PURGE_DELAY` | Media and cover cleanup scan interval | `PT1H` |
+| `DEVS_MEDIA_STALE_UPLOAD_AFTER` | Remove unconfirmed media and cover uploads after | `PT24H` |
+| `DEVS_TRASH_PURGE_DELAY` | Content and lesson trash cleanup scan interval | `PT1H` |
+| `MUX_ENABLED` | Allow new legacy Mux ingestion; existing Mux playback remains compatible | `false` |
 
 The complete reference is in [.env.example](.env.example) and [the architecture guide](docs/architecture.md). Never commit populated environment files or pass credentials as Docker build arguments.
 

@@ -9,16 +9,21 @@ import org.kstacks.devs.media.domain.MediaAssetEntity;
 import org.kstacks.devs.media.domain.MediaAssetRepository;
 import org.kstacks.devs.media.domain.MediaCaptionTrack;
 import org.kstacks.devs.media.domain.MediaStatus;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.net.URI;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 @Service
 public class MediaService {
@@ -145,6 +150,7 @@ public class MediaService {
     public MediaDtos.MediaStatusResponse status(UUID mediaId) {
         var media = repository.findById(mediaId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found"));
+        var current = currentAttachments().get(media.getId());
         return new MediaDtos.MediaStatusResponse(
             media.getId(),
             media.getStatus().name(),
@@ -154,8 +160,136 @@ public class MediaService {
             media.getPlaybackPath() == null ? null : staticHlsLocations.resolve(media.getPlaybackPath()),
             media.getDurationSeconds(),
             captionResponses(media.getCaptionTracks()),
-            media.getFailureMessage()
+            media.getFailureMessage(),
+            media.getPlaybackPath(),
+            media.getEncodingVersion(),
+            media.getChecksumSha256(),
+            media.getCreatedAt(),
+            media.getUpdatedAt(),
+            media.getDeletedAt(),
+            media.getPurgeAfter(),
+            media.getRetainedForUnitId(),
+            current
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<MediaDtos.MediaLibraryItem> list(MediaStatus requestedStatus, Boolean deleted) {
+        var attachments = currentAttachments();
+        Predicate<MediaAssetEntity> statusFilter = requestedStatus == null
+            ? media -> true
+            : media -> media.getStatus() == requestedStatus;
+        // The global library intentionally excludes retained historical
+        // versions. They remain discoverable only through a lesson's version
+        // endpoint, where their ownership is explicit. The trash view is
+        // likewise limited to directly deleted, unattached rows.
+        Predicate<MediaAssetEntity> deletionFilter = Boolean.TRUE.equals(deleted)
+            ? media -> media.getStatus() == MediaStatus.DELETED
+            : media -> media.getStatus() != MediaStatus.DELETED
+                && media.getDeletedAt() == null
+                && media.getRetainedForUnitId() == null;
+        return repository.findAll(Sort.by(Sort.Direction.DESC, "createdAt")).stream()
+            .filter(statusFilter.and(deletionFilter))
+            .map(media -> toLibraryItem(media, attachments.get(media.getId())))
+            .toList();
+    }
+
+    @Transactional
+    public void delete(UUID mediaId) {
+        var media = repository.findById(mediaId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found"));
+        if (media.getStatus() == MediaStatus.DELETED) return;
+        if (media.getRetainedForUnitId() != null || repository.countCurrentAttachments(mediaId) > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Attached media cannot be deleted from the media library");
+        }
+        media.softDelete(properties.retention());
+    }
+
+    @Transactional
+    public MediaDtos.MediaLibraryItem restore(UUID mediaId) {
+        var media = repository.findById(mediaId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Media not found"));
+        if (media.getStatus() != MediaStatus.DELETED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Media is not deleted");
+        }
+        // A deleted asset should never be attachable, but this guard keeps a
+        // legacy row or a concurrent/manual DB change from being restored
+        // while it is already referenced by a lesson.
+        if (repository.countCurrentAttachments(mediaId) > 0) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Attached media cannot be restored from the media library"
+            );
+        }
+        media.restoreUnattached();
+        return toLibraryItem(media, currentAttachments().get(media.getId()));
+    }
+
+    MediaDtos.MediaVersion toVersion(MediaAssetEntity media, boolean current) {
+        return new MediaDtos.MediaVersion(
+            media.getId(),
+            current,
+            media.getProvider(),
+            media.getStatus(),
+            media.getProviderAssetId(),
+            media.getPlaybackId(),
+            media.getPlaybackPath(),
+            playbackUrl(media),
+            media.getDurationSeconds(),
+            media.getEncodingVersion(),
+            media.getChecksumSha256(),
+            captionResponses(media.getCaptionTracks()),
+            media.getCreatedAt(),
+            media.getUpdatedAt(),
+            media.getDeletedAt(),
+            media.getPurgeAfter()
+        );
+    }
+
+    private MediaDtos.MediaLibraryItem toLibraryItem(
+        MediaAssetEntity media,
+        MediaDtos.CurrentAttachment current
+    ) {
+        return new MediaDtos.MediaLibraryItem(
+            media.getId(),
+            media.getProvider(),
+            media.getStatus(),
+            media.getProviderAssetId(),
+            media.getPlaybackId(),
+            media.getPlaybackPath(),
+            playbackUrl(media),
+            media.getDurationSeconds(),
+            media.getEncodingVersion(),
+            media.getChecksumSha256(),
+            captionResponses(media.getCaptionTracks()),
+            media.getCreatedAt(),
+            media.getUpdatedAt(),
+            media.getDeletedAt(),
+            media.getPurgeAfter(),
+            media.getRetainedForUnitId(),
+            current
+        );
+    }
+
+    private URI playbackUrl(MediaAssetEntity media) {
+        return media.getPlaybackPath() == null ? null : staticHlsLocations.resolve(media.getPlaybackPath());
+    }
+
+    private Map<UUID, MediaDtos.CurrentAttachment> currentAttachments() {
+        return repository.findCurrentAttachmentRows().stream().collect(Collectors.toMap(
+            row -> (UUID) row[0],
+            row -> new MediaDtos.CurrentAttachment(
+                (UUID) row[2],
+                firstNonBlank((String) row[3], (String) row[4]),
+                (UUID) row[1],
+                firstNonBlank((String) row[5], (String) row[6])
+            ),
+            (left, right) -> left
+        ));
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        return primary == null || primary.isBlank() ? fallback : primary;
     }
 
     @Transactional

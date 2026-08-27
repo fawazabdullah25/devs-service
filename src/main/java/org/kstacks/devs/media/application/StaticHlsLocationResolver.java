@@ -53,6 +53,14 @@ public class StaticHlsLocationResolver {
         return resolved;
     }
 
+    /** Returns the immutable package directory for a validated manifest path. */
+    public String packagePrefix(String manifestPath) {
+        var path = manifestPath(manifestPath);
+        var slash = path.lastIndexOf('/');
+        if (slash < 1) throw badRequest("The HLS manifest must be inside an immutable package directory");
+        return path.substring(0, slash + 1);
+    }
+
     private String path(String input) {
         if (input == null) throw badRequest("The media path is required");
         var path = input.trim();

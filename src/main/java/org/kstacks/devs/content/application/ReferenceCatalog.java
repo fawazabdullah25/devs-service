@@ -43,4 +43,22 @@ public final class ReferenceCatalog {
 
     public static List<ContentDtos.Topic> topics() { return List.copyOf(TOPICS.values()); }
     public static List<ContentDtos.Level> levels() { return List.copyOf(LEVELS.values()); }
+
+    public static boolean hasTopic(String slug) { return slug != null && TOPICS.containsKey(slug); }
+
+    public static boolean hasLevel(String slug) { return slug != null && LEVELS.containsKey(slug); }
+
+    public static String normalizeTopicSlug(String value) {
+        if (value == null) return null;
+        var normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.startsWith("topic-")) normalized = normalized.substring("topic-".length());
+        return normalized;
+    }
+
+    public static String normalizeLevelSlug(String value) {
+        if (value == null) return null;
+        var normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.startsWith("level-")) normalized = normalized.substring("level-".length());
+        return normalized;
+    }
 }

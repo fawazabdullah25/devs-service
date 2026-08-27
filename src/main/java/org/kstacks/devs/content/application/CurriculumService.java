@@ -6,6 +6,7 @@ import org.kstacks.devs.content.domain.ContentKind;
 import org.kstacks.devs.content.domain.ContentSectionEntity;
 import org.kstacks.devs.content.domain.ContentUnitEntity;
 import org.kstacks.devs.content.domain.LearningContentRepository;
+import org.kstacks.devs.content.domain.LearningContentEntity;
 import org.kstacks.devs.content.domain.PublicationStatus;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -31,14 +32,13 @@ public class CurriculumService {
 
     @Transactional
     public ContentDtos.LearningContent replace(UUID contentId, ContentDtos.CurriculumRequest request) {
-        var content = repository.findDetailedById(contentId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found"));
+        var content = findActiveContent(contentId);
         if (content.getKind() != ContentKind.SERIES) {
             throw badRequest("Only series can contain sections");
         }
 
         var units = new HashMap<UUID, ContentUnitEntity>();
-        content.getUnits().forEach(unit -> units.put(unit.getId(), unit));
+        content.getActiveUnits().forEach(unit -> units.put(unit.getId(), unit));
         validateCompleteCurriculum(request, units);
 
         var existingSections = new HashMap<UUID, ContentSectionEntity>();
@@ -105,6 +105,14 @@ public class CurriculumService {
         content.markCurriculumChanged();
         entityManager.flush();
         return mapper.toDto(content);
+    }
+
+    private LearningContentEntity findActiveContent(UUID contentId) {
+        var content = repository.findDetailedByIdAndDeletedAtIsNull(contentId)
+                .orElseGet(() -> repository.findDetailedById(contentId).orElseThrow(
+                        () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found")));
+        if (content.isDeleted()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found");
+        return content;
     }
 
     private void validateCompleteCurriculum(ContentDtos.CurriculumRequest request, Map<UUID, ContentUnitEntity> units) {

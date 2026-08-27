@@ -13,6 +13,10 @@ import java.util.Locale;
 public final class ContentSpecifications {
     private ContentSpecifications() {}
 
+    public static Specification<LearningContentEntity> active() {
+        return (root, query, builder) -> builder.isNull(root.get("deletedAt"));
+    }
+
     public static Specification<LearningContentEntity> published() {
         return (root, query, builder) -> builder.equal(root.get("status"), PublicationStatus.PUBLISHED);
     }

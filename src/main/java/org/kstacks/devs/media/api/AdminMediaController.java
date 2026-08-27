@@ -3,9 +3,11 @@ package org.kstacks.devs.media.api;
 import jakarta.validation.Valid;
 import org.kstacks.devs.media.application.MediaService;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -20,6 +22,14 @@ public class AdminMediaController {
 
     public AdminMediaController(MediaService service) {
         this.service = service;
+    }
+
+    @GetMapping
+    public java.util.List<MediaDtos.MediaLibraryItem> list(
+        @RequestParam(required = false) org.kstacks.devs.media.domain.MediaStatus status,
+        @RequestParam(required = false) Boolean deleted
+    ) {
+        return service.list(status, deleted);
     }
 
     @PostMapping("/uploads")
@@ -50,5 +60,21 @@ public class AdminMediaController {
     @GetMapping("/{id}")
     public MediaDtos.MediaStatusResponse status(@PathVariable UUID id) {
         return service.status(id);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id) {
+        service.delete(id);
+    }
+
+    @GetMapping("/deleted")
+    public java.util.List<MediaDtos.MediaLibraryItem> deleted() {
+        return service.list(null, true);
+    }
+
+    @PostMapping("/{id}/restore")
+    public MediaDtos.MediaLibraryItem restore(@PathVariable UUID id) {
+        return service.restore(id);
     }
 }

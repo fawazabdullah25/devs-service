@@ -10,6 +10,9 @@ import org.kstacks.devs.attachment.domain.UnitAttachmentRepository;
 import org.kstacks.devs.config.AttachmentProperties;
 import org.kstacks.devs.content.domain.ContentUnitEntity;
 import org.kstacks.devs.content.domain.ContentUnitRepository;
+import org.kstacks.devs.content.domain.ContentKind;
+import org.kstacks.devs.content.domain.ContentVisibility;
+import org.kstacks.devs.content.domain.LearningContentEntity;
 import org.kstacks.devs.media.application.ObjectStorage;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -45,6 +48,10 @@ class AttachmentServiceTests {
         );
         service = new AttachmentService(units, attachments, storage, properties, new AttachmentLocationResolver(properties));
         unit = new ContentUnitEntity("lesson", 1, "Lesson", null, null, null, null);
+        var content = LearningContentEntity.draft(
+            "attachment-test", ContentKind.COURSE, ContentVisibility.PUBLIC, "Course", "Summary"
+        );
+        content.addUnit(unit);
     }
 
     @Test

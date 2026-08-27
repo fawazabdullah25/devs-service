@@ -31,7 +31,40 @@ public class InstructorEntity {
     @Column(name = "avatar_url")
     private String avatarUrl;
 
+    @Column(name = "account_subject", unique = true, length = 255)
+    private String accountSubject;
+
     protected InstructorEntity() {}
+
+    public static InstructorEntity create(
+        String nameEn,
+        String nameAr,
+        String bioEn,
+        String bioAr,
+        String initials,
+        String avatarUrl
+    ) {
+        var instructor = new InstructorEntity();
+        instructor.id = UUID.randomUUID();
+        instructor.update(nameEn, nameAr, bioEn, bioAr, initials, avatarUrl);
+        return instructor;
+    }
+
+    public void update(
+        String nameEn,
+        String nameAr,
+        String bioEn,
+        String bioAr,
+        String initials,
+        String avatarUrl
+    ) {
+        this.nameEn = nameEn;
+        this.nameAr = nameAr;
+        this.bioEn = bioEn == null ? "" : bioEn;
+        this.bioAr = bioAr;
+        this.initials = initials;
+        this.avatarUrl = avatarUrl;
+    }
 
     public UUID getId() { return id; }
     public String getNameEn() { return nameEn; }
@@ -40,4 +73,5 @@ public class InstructorEntity {
     public String getBioAr() { return bioAr; }
     public String getInitials() { return initials; }
     public String getAvatarUrl() { return avatarUrl; }
+    public String getAccountSubject() { return accountSubject; }
 }
