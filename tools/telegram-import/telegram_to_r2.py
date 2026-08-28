@@ -11,8 +11,6 @@ import mimetypes
 import os
 import re
 import tempfile
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -39,11 +37,6 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path, default=Path("output/telegram-manifest.jsonl"))
     parser.add_argument("--limit", type=int, default=None, help="Optional maximum number of messages to inspect")
     parser.add_argument("--dry-run", action="store_true", help="List matching videos without downloading or uploading")
-    parser.add_argument(
-        "--archive-only",
-        action="store_true",
-        help="Upload to R2 without registering the source with Devs/Mux",
-    )
     return parser.parse_args()
 
 
@@ -64,15 +57,14 @@ def file_details(message: Any) -> tuple[str, str] | None:
     return safe_filename(name), mime or "video/mp4"
 
 
-def completed_messages(manifest: Path, archive_only: bool) -> set[int]:
+def completed_messages(manifest: Path) -> set[int]:
     if not manifest.exists():
         return set()
     completed: set[int] = set()
     for line in manifest.read_text(encoding="utf-8").splitlines():
         try:
             row = json.loads(line)
-            completed_statuses = {"uploaded", "already-present", "registered"} if archive_only else {"registered"}
-            if row.get("status") in completed_statuses:
+            if row.get("status") in {"uploaded", "already-present"}:
                 completed.add(int(row["message_id"]))
         except (ValueError, TypeError, json.JSONDecodeError):
             continue
@@ -115,41 +107,6 @@ def write_manifest(path: Path, row: dict[str, Any]) -> None:
         target.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-def register_with_devs(
-    api_url: str,
-    token: str,
-    object_key: str,
-    filename: str,
-    content_type: str,
-    checksum: str,
-) -> dict[str, Any]:
-    body = json.dumps(
-        {
-            "objectKey": object_key,
-            "filename": filename,
-            "contentType": content_type,
-            "checksumSha256": checksum,
-        }
-    ).encode("utf-8")
-    headers = {"Accept": "application/json", "Content-Type": "application/json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    request = urllib.request.Request(
-        f"{api_url.rstrip('/')}/admin/media/imports",
-        data=body,
-        headers=headers,
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=45) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Devs registration failed ({error.code}): {detail[:500]}") from error
-    except urllib.error.URLError as error:
-        raise RuntimeError(f"Could not reach the Devs API: {error.reason}") from error
-
-
 async def migrate(args: argparse.Namespace) -> None:
     if not args.channel:
         raise SystemExit("Provide --channel or TELEGRAM_CHANNEL")
@@ -161,10 +118,8 @@ async def migrate(args: argparse.Namespace) -> None:
     client = TelegramClient(session, api_id, api_hash)
     storage = None if args.dry_run else r2_client()
     bucket = "" if args.dry_run else required("R2_BUCKET")
-    api_url = "" if args.archive_only or args.dry_run else required("DEVS_API_URL")
-    api_token = os.getenv("DEVS_API_TOKEN", "").strip()
-    done = completed_messages(args.manifest, args.archive_only)
-    matched = uploaded = skipped = failed = 0
+    done = completed_messages(args.manifest)
+    matched = uploaded = skipped = 0
 
     async with client:
         entity = await client.get_entity(args.channel)
@@ -209,30 +164,10 @@ async def migrate(args: argparse.Namespace) -> None:
                 else:
                     skipped += 1
 
-                registration = None
-                status = storage_status
-                registration_error = None
-                if not args.archive_only:
-                    try:
-                        registration = await asyncio.to_thread(
-                            register_with_devs,
-                            api_url,
-                            api_token,
-                            key,
-                            filename,
-                            content_type,
-                            checksum,
-                        )
-                        status = "registered"
-                    except RuntimeError as error:
-                        status = "registration-failed"
-                        registration_error = str(error)
-                        failed += 1
-
                 write_manifest(
                     args.manifest,
                     {
-                        "status": status,
+                        "status": storage_status,
                         "storage_status": storage_status,
                         "message_id": message.id,
                         "message_date": message.date.astimezone(timezone.utc).isoformat() if message.date else None,
@@ -241,21 +176,15 @@ async def migrate(args: argparse.Namespace) -> None:
                         "bytes": destination.stat().st_size,
                         "sha256": checksum,
                         "object_key": key,
-                        "devs_media_id": registration.get("mediaId") if registration else None,
-                        "mux_status": registration.get("status") if registration else None,
-                        "registration_error": registration_error,
                         "caption": message.message or "",
                         "migrated_at": datetime.now(timezone.utc).isoformat(),
                     },
                 )
-                print(f"{status} message={message.id} key={key}")
+                print(f"{storage_status} message={message.id} key={key}")
 
     print(
-        f"complete matched={matched} uploaded={uploaded} skipped={skipped} "
-        f"failed={failed} dry_run={args.dry_run}"
+        f"complete matched={matched} uploaded={uploaded} skipped={skipped} dry_run={args.dry_run}"
     )
-    if failed:
-        raise SystemExit(1)
 
 
 if __name__ == "__main__":

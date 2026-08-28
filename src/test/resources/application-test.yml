@@ -16,5 +16,3 @@ devs:
     allow-insecure-admin: false
   r2:
     enabled: false
-  mux:
-    enabled: false

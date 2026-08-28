@@ -13,6 +13,7 @@ import org.kstacks.devs.content.domain.LearningContentEntity;
 import org.kstacks.devs.content.domain.LearningContentRepository;
 import org.kstacks.devs.content.domain.PublicationStatus;
 import org.kstacks.devs.content.domain.SpokenLanguage;
+import org.kstacks.devs.content.domain.TagEntity;
 import org.kstacks.devs.media.domain.MediaAssetEntity;
 import org.kstacks.devs.media.domain.MediaAssetRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,14 +53,14 @@ class ContentEditorialDatabaseTests {
     void fullMetadataUpdatePersistsEditorialFieldsAndDoesNotMutateKind() {
         var content = saveContent("metadata", ContentKind.COURSE);
         var instructor = instructors.saveAndFlush(InstructorEntity.create(
-            "Ada Lovelace", "آدا لوفليس", "Pioneer", "رائدة", "AL", null
+            "Ada Lovelace", "آدا لوفليس", "Pioneer", "رائدة", "AL"
         ));
 
         var updated = contentService.update(content.getId(), new ContentDtos.UpdateMetadataRequest(
             "Advanced Web", "ويب متقدم", content.getSlug(),
             "A bilingual summary", "ملخص ثنائي اللغة", "A detailed description", "وصف تفصيلي",
-            ContentVisibility.AUTHENTICATED, SpokenLanguage.AR, "level-builder",
-            List.of("topic-web", "git"), List.of(instructor.getId()), 3
+            ContentVisibility.AUTHENTICATED, SpokenLanguage.AR,
+            List.of("builder", "web", "git"), List.of(instructor.getId()), 3
         ));
         entityManager.flush();
         entityManager.clear();
@@ -75,8 +76,8 @@ class ContentEditorialDatabaseTests {
         assertThat(persisted.getDescriptionAr()).isEqualTo("وصف تفصيلي");
         assertThat(persisted.getVisibility()).isEqualTo(ContentVisibility.AUTHENTICATED);
         assertThat(persisted.getSpokenLanguage()).isEqualTo(SpokenLanguage.AR);
-        assertThat(persisted.getLevelSlug()).isEqualTo("builder");
-        assertThat(persisted.getTopicSlugs()).containsExactlyInAnyOrder("web", "git");
+        assertThat(persisted.getTags()).extracting(TagEntity::getSlug)
+            .containsExactlyInAnyOrder("builder", "web", "git");
         assertThat(persisted.getInstructors()).extracting(InstructorEntity::getId).containsExactly(instructor.getId());
         assertThat(persisted.getFeaturedRank()).isEqualTo(3);
     }
@@ -101,7 +102,7 @@ class ContentEditorialDatabaseTests {
     @Test
     void instructorCrudPreservesReservedAccountSubjectAndEnforcesNullableUniqueIndex() {
         var created = instructorService.create(new ContentDtos.InstructorCreateRequest(
-            "Grace Hopper", "غريس هوبر", null, null, "GH", null
+            "Grace Hopper", "غريس هوبر", null, null, "GH"
         ));
         var entity = instructors.findById(created.id()).orElseThrow();
         assertThat(entity.getAccountSubject()).isNull();
@@ -113,13 +114,13 @@ class ContentEditorialDatabaseTests {
         entityManager.clear();
 
         var updated = instructorService.update(created.id(), new ContentDtos.InstructorUpdateRequest(
-            "Grace B. Hopper", "غريس ب. هوبر", "Compiler pioneer", null, "GBH", null
+            "Grace B. Hopper", "غريس ب. هوبر", "Compiler pioneer", null, "GBH"
         ));
         assertThat(updated.nameEn()).isEqualTo("Grace B. Hopper");
         assertThat(instructors.findById(created.id()).orElseThrow().getAccountSubject())
             .isEqualTo("account-subject-1");
 
-        var second = instructors.saveAndFlush(InstructorEntity.create("Second", null, null, null, "S", null));
+        var second = instructors.saveAndFlush(InstructorEntity.create("Second", null, null, null, "S"));
         assertThatThrownBy(() -> entityManager.createNativeQuery(
             "UPDATE instructors SET account_subject = :subject WHERE id = :id"
         ).setParameter("subject", "account-subject-1").setParameter("id", second.getId()).executeUpdate())
@@ -150,7 +151,7 @@ class ContentEditorialDatabaseTests {
         assertThat(deleted.purgeAfter()).isAfter(deleted.deletedAt());
         assertThat(contentService.adminContent()).noneMatch(item -> item.id().equals(content.getId()));
         assertThat(contentService.home().latest()).noneMatch(item -> item.id().equals(content.getId()));
-        assertThat(contentService.catalog(null, null, null, null, null).items())
+        assertThat(contentService.catalog(null, null, null, null).items())
             .noneMatch(item -> item.id().equals(content.getId()));
         assertThat(contentService.deletedContent()).extracting(ContentDtos.LearningContent::id)
             .contains(content.getId());
@@ -170,15 +171,18 @@ class ContentEditorialDatabaseTests {
         var content = saveContent("lesson-lifecycle", ContentKind.SERIES);
         var first = new ContentUnitEntity("first", 1, "First", null, null, null, null);
         var second = new ContentUnitEntity("second", 2, "Second", null, null, null, null);
+        var section = new ContentSectionEntity(1, "Foundations", null, null, null);
+        content.addSection(section);
         content.addUnit(first);
         content.addUnit(second);
         contents.saveAndFlush(content);
 
         contentService.updateUnit(content.getId(), first.getId(), new ContentDtos.UnitUpdateRequest(
-            "first-edited", "First edited", "الأول", "Updated summary", "ملخص محدث"
+            "first-edited", "First edited", "الأول", "Updated summary", "ملخص محدث", section.getId()
         ));
         assertThat(contents.findDetailedById(content.getId()).orElseThrow().getUnits())
-            .anyMatch(unit -> unit.getSlug().equals("first-edited") && unit.getTitleAr().equals("الأول"));
+            .anyMatch(unit -> unit.getSlug().equals("first-edited") && unit.getTitleAr().equals("الأول")
+                && unit.getSection().getId().equals(section.getId()));
 
         var deleted = contentService.deleteUnit(content.getId(), first.getId());
         assertThat(deleted.deletedAt()).isNotNull();
@@ -239,9 +243,12 @@ class ContentEditorialDatabaseTests {
         List<UUID> instructorIds,
         String level
     ) {
+        var tags = new java.util.ArrayList<String>();
+        tags.add(level.replaceFirst("^level-", ""));
+        topics.stream().map(topic -> topic.replaceFirst("^topic-", "")).forEach(tags::add);
         return new ContentDtos.UpdateMetadataRequest(
             "Title", null, slug, "Summary", null, "Description", null,
-            ContentVisibility.PUBLIC, SpokenLanguage.MIXED, level, topics, instructorIds, null
+            ContentVisibility.PUBLIC, SpokenLanguage.MIXED, tags, instructorIds, null
         );
     }
 

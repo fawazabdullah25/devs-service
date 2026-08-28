@@ -5,7 +5,6 @@ import org.kstacks.devs.config.StaticHlsProperties;
 import org.kstacks.devs.media.application.StaticHlsLocationResolver;
 import org.kstacks.devs.media.domain.MediaAssetEntity;
 import org.kstacks.devs.media.domain.MediaCaptionTrack;
-import org.kstacks.devs.media.domain.MediaProvider;
 
 import java.net.URI;
 import java.time.Duration;
@@ -32,8 +31,6 @@ class ContentMapperTests {
 
         var dto = mapper.toDto(media);
 
-        assertThat(dto.provider()).isEqualTo(MediaProvider.STATIC_HLS);
-        assertThat(dto.playbackId()).isNull();
         assertThat(dto.playbackUrl()).isEqualTo(
             URI.create("https://video.example.test/lessons/java/v1/master.m3u8")
         );

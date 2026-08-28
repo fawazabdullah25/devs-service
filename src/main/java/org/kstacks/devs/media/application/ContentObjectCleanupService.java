@@ -6,7 +6,7 @@ import org.kstacks.devs.content.domain.LearningContentEntity;
 import org.kstacks.devs.media.domain.ContentCoverEntity;
 import org.kstacks.devs.media.domain.ContentCoverRepository;
 import org.kstacks.devs.media.domain.MediaAssetEntity;
-import org.kstacks.devs.media.domain.MediaProvider;
+import org.kstacks.devs.media.domain.CaptionUploadRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,17 +31,20 @@ import java.util.UUID;
 public class ContentObjectCleanupService {
     private final EntityManager entityManager;
     private final ContentCoverRepository covers;
+    private final CaptionUploadRepository captionUploads;
     private final ObjectStorage storage;
     private final StaticHlsLocationResolver staticHlsLocations;
 
     public ContentObjectCleanupService(
         EntityManager entityManager,
         ContentCoverRepository covers,
+        CaptionUploadRepository captionUploads,
         ObjectStorage storage,
         StaticHlsLocationResolver staticHlsLocations
     ) {
         this.entityManager = entityManager;
         this.covers = covers;
+        this.captionUploads = captionUploads;
         this.storage = storage;
         this.staticHlsLocations = staticHlsLocations;
     }
@@ -156,14 +159,16 @@ public class ContentObjectCleanupService {
         Set<String> objectKeys,
         Set<String> packagePrefixes
     ) {
-        if (media.getProvider() == MediaProvider.STATIC_HLS) {
-            if (media.getPlaybackPath() == null) {
-                throw new IllegalStateException("Static HLS media has no playback manifest path");
-            }
-            packagePrefixes.add(staticHlsLocations.packagePrefix(media.getPlaybackPath()));
-        } else if (media.getSourceObjectKey() != null) {
-            objectKeys.add(media.getSourceObjectKey());
+        if (media.getPlaybackPath() == null) {
+            throw new IllegalStateException("Static HLS media has no playback manifest path");
         }
+        // Managed caption uploads live outside the immutable HLS package. They
+        // must be captured explicitly before the media row is removed; the
+        // database FK cascade alone cannot clean an external object.
+        captionUploads.findByMediaId(media.getId()).stream()
+            .map(upload -> upload.getObjectKey())
+            .forEach(objectKeys::add);
+        packagePrefixes.add(staticHlsLocations.packagePrefix(media.getPlaybackPath()));
     }
 
     private CleanupPlan planContentObjectsInTransaction(UUID contentId) {

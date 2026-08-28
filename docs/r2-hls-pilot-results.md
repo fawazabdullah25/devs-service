@@ -64,7 +64,10 @@ At the current R2 Standard rate of `$0.015/GB-month`:
 - A watched hour uses roughly 600 segment requests plus a small number of playlist, initialization, poster, and caption requests. CDN hits reduce R2-origin Class B operations.
 - R2 Standard currently has no Internet egress fee, but operation counts and other Cloudflare services still need monitoring.
 
-For comparison, Mux Basic currently starts at `$0.003` per stored 1080p minute per month. At that list rate, 100 stored hours are approximately `$18/month` before cold-storage discounts or plan credits. Mux includes managed encoding, delivery, playback security options, and QoE analytics that this R2 design must operate separately.
+For comparison, managed video platforms generally bundle encoding, delivery,
+playback security, and QoE analytics at a higher per-minute cost. The R2/HLS
+design operates those concerns separately and should be evaluated against the
+team's actual engineering and operations budget.
 
 ## Playback observations
 
@@ -130,9 +133,8 @@ The two rehearsal inputs and four sample output versions were removed after thei
 - [ ] Test at least one real Saudi mobile or home network.
 - [ ] Confirm public URL/downloadability acceptance with the team.
 - [ ] Assign ownership for encoding failures, caption review, browser regressions, and CDN/R2 monitoring.
-- [ ] Decide between self-managed R2/HLS and Mux using both provider cost and engineering/operational cost.
+- [x] Decide to use self-managed R2/HLS for the current launch, while tracking engineering and operational cost.
 
 ## Pricing references
 
 - [Cloudflare R2 pricing](https://developers.cloudflare.com/r2/pricing/)
-- [Mux Video pricing](https://www.mux.com/pricing)

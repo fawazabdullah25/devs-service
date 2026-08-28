@@ -40,19 +40,16 @@ public final class ContentSpecifications {
         return value == null ? Specification.unrestricted() : (root, query, builder) -> builder.equal(root.get("kind"), value);
     }
 
-    public static Specification<LearningContentEntity> level(String value) {
-        return value == null || value.isBlank() ? Specification.unrestricted() : (root, query, builder) -> builder.equal(root.get("levelSlug"), value);
-    }
-
     public static Specification<LearningContentEntity> language(SpokenLanguage value) {
         return value == null ? Specification.unrestricted() : (root, query, builder) -> builder.equal(root.get("spokenLanguage"), value);
     }
 
-    public static Specification<LearningContentEntity> topic(String value) {
+    public static Specification<LearningContentEntity> tag(String value) {
         if (value == null || value.isBlank()) return Specification.unrestricted();
         return (root, query, builder) -> {
             query.distinct(true);
-            return builder.equal(root.joinSet("topicSlugs", JoinType.INNER), value);
+            var tags = root.joinSet("tags", JoinType.INNER);
+            return builder.equal(tags.get("slug"), value);
         };
     }
 }

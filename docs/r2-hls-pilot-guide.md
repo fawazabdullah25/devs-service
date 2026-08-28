@@ -1179,7 +1179,7 @@ Measure both. Never judge the CDN only from a warm local browser cache.
 
 Do this only after the isolated HLS test passes.
 
-As of 18 August 2026, the pilot integration is implemented in Devs. It was added as a dedicated `STATIC_HLS` path without changing the existing Mux workflow or pretending an HLS URL is a Mux playback ID.
+As of 18 August 2026, the pilot integration is implemented in Devs as a dedicated `STATIC_HLS` path.
 
 The implementation includes:
 
@@ -1191,7 +1191,7 @@ The implementation includes:
 6. A `READY` transition only after the remote master and required metadata have been validated.
 7. Vidstack plus locally bundled `hls.js` in the frontend.
 8. External VTT caption-track support.
-9. Updated admin wording that does not mention Mux for static HLS.
+9. Updated admin wording that describes static HLS consistently.
 10. Automated tests for provider mapping, validation, public DTOs, and playback rendering.
 
 Recommended persisted information:
@@ -1221,7 +1221,8 @@ Once that implementation exists:
 6. Test Arabic and English route navigation around the player.
 7. Test SSR by directly loading and refreshing the lesson URL.
 
-At this stage, compare Vidstack behavior—not the minimal hls.js page—with Mux Player.
+At this stage, compare Vidstack behavior—not the minimal hls.js page—with the
+production player integration.
 
 ---
 
@@ -1304,10 +1305,10 @@ Cloudflare cache hits do not need R2 origin reads. Cache misses do. Compare R2 a
 
 Complete this table after testing:
 
-| Metric | R2/HLS pilot | Mux Basic comparison |
+| Metric | R2/HLS pilot | Managed-video baseline |
 |---|---:|---:|
 | One-hour retained storage | | Provider-managed |
-| Projected 100-hour monthly storage cost | | Approximately current Mux rates |
+| Projected 100-hour monthly storage cost | | Recalculate from the chosen managed-video service |
 | Encoding time owned by KStacks | | None |
 | Startup time | | |
 | Seek time | | |
@@ -1493,7 +1494,10 @@ Temporary rejected renditions can be removed after their failure is documented.
 - [x] Automated backend and frontend tests pass
 - [ ] Real draft lesson passes the full device matrix
 
-If the pilot passes technically but fails operationally, Mux or Bunny Stream may still be the better system. Engineering time, monitoring, security, and recovery are real costs even when the provider invoice is small.
+If the pilot passes technically but fails operationally, a managed video
+service may still be the better system. Engineering time, monitoring,
+security, and recovery are real costs even when the object-storage invoice is
+small.
 
 ---
 
@@ -1520,7 +1524,7 @@ If the pilot passes technically but fails operationally, Mux or Bunny Stream may
 18. Measure storage, encoding time, and service impact
 19. Implement STATIC_HLS properly in Devs
 20. Repeat the complete matrix inside a real draft lesson
-21. Compare measured results with Mux and make the decision
+21. Compare measured results with a managed-video alternative and make the decision
 ```
 
 ---

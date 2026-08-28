@@ -3,6 +3,7 @@ package org.kstacks.devs.content.api;
 import jakarta.validation.Valid;
 import org.kstacks.devs.content.application.InstructorService;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,8 +20,12 @@ import java.util.UUID;
 @RequestMapping("/devs/api/v1/admin/instructors")
 public class AdminInstructorController {
     private final InstructorService service;
+    private final org.kstacks.devs.content.application.InstructorAvatarService avatarService;
 
-    public AdminInstructorController(InstructorService service) { this.service = service; }
+    public AdminInstructorController(InstructorService service, org.kstacks.devs.content.application.InstructorAvatarService avatarService) {
+        this.service = service;
+        this.avatarService = avatarService;
+    }
 
     @GetMapping
     public List<ContentDtos.InstructorProfile> list() { return service.list(); }
@@ -38,4 +43,29 @@ public class AdminInstructorController {
     ) {
         return service.update(id, request);
     }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id) { service.delete(id); }
+
+    @PostMapping("/{id}/avatar/uploads")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ContentDtos.InstructorAvatarUploadGrant avatarUpload(
+        @PathVariable UUID id,
+        @Valid @RequestBody ContentDtos.InstructorAvatarUploadRequest request
+    ) {
+        return avatarService.requestUpload(id, request);
+    }
+
+    @PostMapping("/{id}/avatar/complete")
+    public ContentDtos.InstructorAvatar avatarComplete(
+        @PathVariable UUID id,
+        @Valid @RequestBody ContentDtos.InstructorAvatarCompleteRequest request
+    ) {
+        return avatarService.complete(id, request);
+    }
+
+    @DeleteMapping("/{id}/avatar")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteAvatar(@PathVariable UUID id) { avatarService.delete(id); }
 }

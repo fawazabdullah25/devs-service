@@ -57,10 +57,11 @@ class HttpStaticHlsPackageValidatorTests {
         respond("/pilots/lesson/v1/720p/index.m3u8", variant());
         respond("/pilots/lesson/v1/captions/en.vtt", "WEBVTT\n\n00:00.000 --> 00:02.000\nHello\n");
 
-        assertThatCode(() -> validator.validate(
+        var result = validator.validate(
             "pilots/lesson/v1/master.m3u8",
             List.of(new MediaCaptionTrack("en", "English", "pilots/lesson/v1/captions/en.vtt", true))
-        )).doesNotThrowAnyException();
+        );
+        assertThat(result.durationSeconds()).isEqualTo(6);
     }
 
     @Test
@@ -78,11 +79,77 @@ class HttpStaticHlsPackageValidatorTests {
         });
     }
 
+    @Test
+    void computesDurationFromEverySegmentAndRejectsMismatchedRenditions() {
+        respond("/pilots/duration/v1/master.m3u8", """
+            #EXTM3U
+            #EXT-X-STREAM-INF:BANDWIDTH=5000000
+            1080p/index.m3u8
+            #EXT-X-STREAM-INF:BANDWIDTH=2800000
+            720p/index.m3u8
+            """);
+        respond("/pilots/duration/v1/1080p/index.m3u8", """
+            #EXTM3U
+            #EXT-X-TARGETDURATION:6
+            #EXTINF:6.25,
+            first.m4s
+            #EXTINF:5.75,
+            second.m4s
+            #EXT-X-ENDLIST
+            """);
+        respond("/pilots/duration/v1/720p/index.m3u8", """
+            #EXTM3U
+            #EXT-X-TARGETDURATION:6
+            #EXTINF:6.0,
+            first.m4s
+            #EXT-X-ENDLIST
+            """);
+
+        assertThatThrownBy(() -> validator.validate("pilots/duration/v1/master.m3u8", List.of()))
+            .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                assertThat(exception.getReason()).contains("durations differ"));
+
+        respond("/pilots/duration/v1/720p/index.m3u8", """
+            #EXTM3U
+            #EXT-X-TARGETDURATION:7
+            #EXTINF:6.2,
+            first.m4s
+            #EXTINF:5.8,
+            second.m4s
+            #EXT-X-ENDLIST
+            """);
+        assertThat(validator.validate("pilots/duration/v1/master.m3u8", List.of()).durationSeconds())
+            .isEqualTo(12);
+    }
+
+    @Test
+    void rejectsAnIncompleteRenditionWithoutEndListOrSegmentPath() {
+        respond("/pilots/incomplete/v1/master.m3u8", """
+            #EXTM3U
+            #EXT-X-STREAM-INF:BANDWIDTH=1
+            index.m3u8
+            """);
+        respond("/pilots/incomplete/v1/index.m3u8", """
+            #EXTM3U
+            #EXT-X-TARGETDURATION:6
+            #EXTINF:6.0,
+            """);
+
+        assertThatThrownBy(() -> validator.validate("pilots/incomplete/v1/master.m3u8", List.of()))
+            .isInstanceOfSatisfying(ResponseStatusException.class, exception ->
+                assertThat(exception.getReason()).contains("incomplete"));
+    }
+
     private String variant() {
         return "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6.0,\nseg_00001.m4s\n#EXT-X-ENDLIST\n";
     }
 
     private void respond(String path, String body) {
+        try {
+            server.removeContext(path);
+        } catch (IllegalArgumentException ignored) {
+            // The first response for a path has no existing context.
+        }
         server.createContext(path, exchange -> write(exchange, body));
     }
 

@@ -12,7 +12,6 @@ import java.net.URI;
 @ConditionalOnProperty(name = "devs.r2.enabled", havingValue = "false", matchIfMissing = true)
 public class UnavailableObjectStorage implements ObjectStorage {
     @Override public UploadGrant signUpload(String objectKey, String contentType, long contentLength) { throw unavailable(); }
-    @Override public URI signDownload(String objectKey) { throw unavailable(); }
     @Override public boolean exists(String objectKey) { throw unavailable(); }
     @Override public long size(String objectKey) { throw unavailable(); }
     @Override public void delete(String objectKey) { throw unavailable(); }

@@ -28,11 +28,10 @@ public class PublicContentController {
     public ContentDtos.Catalog catalog(
         @RequestParam(required = false) String query,
         @RequestParam(required = false) ContentKind kind,
-        @RequestParam(required = false) String topic,
-        @RequestParam(required = false) String level,
+        @RequestParam(required = false) String tag,
         @RequestParam(required = false) SpokenLanguage language
     ) {
-        return service.catalog(query, kind, topic, level, language);
+        return service.catalog(query, kind, tag, language);
     }
 
     @GetMapping("/content/{slug}")

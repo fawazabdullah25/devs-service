@@ -1,19 +1,13 @@
 # Media operations
 
-## Provider inventory
+## Static-HLS inventory
 
-Mux remains supported for existing records, but it is disabled by default. Before
-retiring the compatibility code, run this query against the Devs database:
-
-```sql
-SELECT provider, COUNT(*)
-FROM media_assets
-GROUP BY provider
-ORDER BY provider;
-```
-
-Remove the Mux integration only after staging and production both report zero
-`MUX` rows and the team has archived any required playback metadata.
+Devs accepts only pre-built static-HLS packages. Every registered package has
+an immutable manifest path, an encoding version, and a duration computed from
+its rendition playlists. The V12 migration rejects non-static legacy rows
+before removing obsolete provider-specific columns; it never silently deletes
+media data. If a pre-production database still contains an unsupported row,
+export and review it before applying the migration.
 
 ## Media lifecycle
 
@@ -25,9 +19,10 @@ retained version; it is soft-deleted for `DEVS_MEDIA_RETENTION` (7 days by
 default).
 
 The scheduled purge removes database rows only after the backing object cleanup
-has succeeded. Static HLS media is deleted as one validated manifest directory;
-legacy Mux media is never passed to prefix deletion and only its exact source
-object key is considered.
+has succeeded. Static HLS media is deleted as one validated manifest directory.
+Managed caption objects are deleted by exact key as part of the same
+media/content purge; the immutable HLS package is never modified by caption
+edits.
 
 Production must set `STATIC_HLS_ALLOWED_PATH_PREFIX` to the isolated Devs HLS
 key prefix. An empty or mismatched prefix deliberately blocks HLS directory

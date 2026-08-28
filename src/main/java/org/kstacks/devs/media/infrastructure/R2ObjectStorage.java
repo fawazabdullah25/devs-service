@@ -9,10 +9,8 @@ import software.amazon.awssdk.services.s3.model.Delete;
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.S3Exception;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import java.net.URI;
@@ -57,13 +55,6 @@ final class R2ObjectStorage implements ObjectStorage {
         headers.put("Content-Type", contentType);
         if (contentDisposition != null) headers.put("Content-Disposition", contentDisposition);
         return new UploadGrant(URI.create(signed.url().toString()), objectKey, Map.copyOf(headers), Instant.now().plus(uploadExpiry));
-    }
-
-    @Override
-    public URI signDownload(String objectKey) {
-        var objectRequest = GetObjectRequest.builder().bucket(bucket).key(objectKey).build();
-        var request = GetObjectPresignRequest.builder().signatureDuration(Duration.ofHours(1)).getObjectRequest(objectRequest).build();
-        return signedUri(presigner.presignGetObject(request).url().toString());
     }
 
     @Override
@@ -144,7 +135,4 @@ final class R2ObjectStorage implements ObjectStorage {
         return value.endsWith("/") ? value : value + "/";
     }
 
-    private URI signedUri(String value) {
-        return URI.create(value);
-    }
 }

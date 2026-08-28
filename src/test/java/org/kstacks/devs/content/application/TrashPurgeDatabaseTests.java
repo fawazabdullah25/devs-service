@@ -15,6 +15,8 @@ import org.kstacks.devs.media.application.ObjectStorage;
 import org.kstacks.devs.media.domain.ContentCoverEntity;
 import org.kstacks.devs.media.domain.ContentCoverRepository;
 import org.kstacks.devs.media.domain.CoverStatus;
+import org.kstacks.devs.media.domain.CaptionUploadEntity;
+import org.kstacks.devs.media.domain.CaptionUploadRepository;
 import org.kstacks.devs.media.domain.MediaAssetEntity;
 import org.kstacks.devs.media.domain.MediaAssetRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +43,7 @@ class TrashPurgeDatabaseTests {
     @Autowired private UnitAttachmentRepository attachments;
     @Autowired private ContentCoverRepository covers;
     @Autowired private MediaAssetRepository media;
+    @Autowired private CaptionUploadRepository captionUploads;
 
     @MockitoBean private ObjectStorage storage;
 
@@ -64,6 +67,14 @@ class TrashPurgeDatabaseTests {
         );
         attachment.ready();
         attachments.save(attachment);
+        var captionUpload = CaptionUploadEntity.uploading(
+            java.util.UUID.randomUUID(),
+            "pilots/captions/" + removedMedia.getId() + "/en.vtt",
+            "en.vtt", "text/vtt", 32
+        );
+        captionUpload.complete();
+        captionUpload.attachTo(removedMedia.getId());
+        captionUploads.save(captionUpload);
         removed.softDelete(Duration.ZERO);
         units.saveAndFlush(removed);
 
@@ -74,6 +85,7 @@ class TrashPurgeDatabaseTests {
         assertThat(media.findById(removedMedia.getId())).isEmpty();
         assertThat(media.findById(siblingMedia.getId())).isPresent();
         verify(storage).delete("attachments/" + removed.getId() + "/file/notes.pdf");
+        verify(storage).delete("pilots/captions/" + removedMedia.getId() + "/en.vtt");
         verify(storage).deletePrefix("pilots/purge/removed/");
     }
 

@@ -2,8 +2,6 @@ package org.kstacks.devs.content.domain;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
-import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -74,9 +72,6 @@ public class LearningContentEntity {
     @Column(name = "description_ar")
     private String descriptionAr;
 
-    @Column(name = "level_slug", nullable = false, length = 80)
-    private String levelSlug;
-
     @Column(name = "cover_url")
     private String coverUrl;
 
@@ -108,10 +103,14 @@ public class LearningContentEntity {
     @Column(name = "purge_state", nullable = false, length = 16)
     private TrashPurgeState purgeState = TrashPurgeState.NONE;
 
-    @ElementCollection(fetch = FetchType.LAZY)
-    @CollectionTable(name = "content_topics", joinColumns = @JoinColumn(name = "content_id"))
-    @Column(name = "topic_slug", nullable = false, length = 80)
-    private Set<String> topicSlugs = new LinkedHashSet<>();
+    /** Authoritative editorial classification. */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "content_tag_assignments",
+        joinColumns = @JoinColumn(name = "content_id"),
+        inverseJoinColumns = @JoinColumn(name = "tag_id")
+    )
+    private Set<TagEntity> tags = new LinkedHashSet<>();
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
@@ -142,7 +141,6 @@ public class LearningContentEntity {
         content.titleEn = title;
         content.summaryEn = summary;
         content.descriptionEn = summary;
-        content.levelSlug = "getting-started";
         return content;
     }
 
@@ -156,8 +154,7 @@ public class LearningContentEntity {
         String descriptionAr,
         ContentVisibility visibility,
         SpokenLanguage spokenLanguage,
-        String levelSlug,
-        Set<String> topicSlugs,
+        Set<TagEntity> tags,
         Set<InstructorEntity> instructors,
         Integer featuredRank
     ) {
@@ -170,26 +167,12 @@ public class LearningContentEntity {
         this.summaryAr = summaryAr;
         this.descriptionEn = descriptionEn;
         this.descriptionAr = descriptionAr;
-        this.levelSlug = levelSlug;
-        this.topicSlugs.clear();
-        this.topicSlugs.addAll(topicSlugs);
+        this.tags.clear();
+        this.tags.addAll(tags);
         this.instructors.clear();
         this.instructors.addAll(instructors);
         this.featuredRank = featuredRank;
-    }
 
-    /**
-     * Compatibility overload for callers that still submit the original
-     * minimal metadata shape. New writes should use the full editorial update.
-     */
-    public void updateMetadata(String slug, ContentKind kind, ContentVisibility visibility, String title, String summary) {
-        if (this.descriptionEn == null || this.descriptionEn.isBlank() || this.descriptionEn.equals(this.summaryEn)) {
-            this.descriptionEn = summary;
-        }
-        this.slug = slug;
-        this.visibility = visibility;
-        this.titleEn = title;
-        this.summaryEn = summary;
     }
 
     public void softDelete(Duration retention) {
@@ -273,7 +256,6 @@ public class LearningContentEntity {
     public String getSummaryAr() { return summaryAr; }
     public String getDescriptionEn() { return descriptionEn; }
     public String getDescriptionAr() { return descriptionAr; }
-    public String getLevelSlug() { return levelSlug; }
     public String getCoverUrl() { return coverUrl; }
     public Integer getFeaturedRank() { return featuredRank; }
     public Instant getPublishedAt() { return publishedAt; }
@@ -284,7 +266,7 @@ public class LearningContentEntity {
     public Instant getDeletedAt() { return deletedAt; }
     public Instant getPurgeAfter() { return purgeAfter; }
     public TrashPurgeState getPurgeState() { return purgeState; }
-    public Set<String> getTopicSlugs() { return Set.copyOf(topicSlugs); }
+    public Set<TagEntity> getTags() { return Set.copyOf(tags); }
     public Set<InstructorEntity> getInstructors() { return Set.copyOf(instructors); }
     public List<ContentUnitEntity> getUnits() { return List.copyOf(units); }
     public List<ContentUnitEntity> getActiveUnits() {

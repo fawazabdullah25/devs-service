@@ -5,6 +5,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -28,11 +30,14 @@ public class InstructorEntity {
     @Column(nullable = false, length = 8)
     private String initials;
 
-    @Column(name = "avatar_url")
-    private String avatarUrl;
-
     @Column(name = "account_subject", unique = true, length = 255)
     private String accountSubject;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    @Column(name = "purge_after")
+    private Instant purgeAfter;
 
     protected InstructorEntity() {}
 
@@ -41,12 +46,11 @@ public class InstructorEntity {
         String nameAr,
         String bioEn,
         String bioAr,
-        String initials,
-        String avatarUrl
+        String initials
     ) {
         var instructor = new InstructorEntity();
         instructor.id = UUID.randomUUID();
-        instructor.update(nameEn, nameAr, bioEn, bioAr, initials, avatarUrl);
+        instructor.update(nameEn, nameAr, bioEn, bioAr, initials);
         return instructor;
     }
 
@@ -55,15 +59,13 @@ public class InstructorEntity {
         String nameAr,
         String bioEn,
         String bioAr,
-        String initials,
-        String avatarUrl
+        String initials
     ) {
         this.nameEn = nameEn;
         this.nameAr = nameAr;
         this.bioEn = bioEn == null ? "" : bioEn;
         this.bioAr = bioAr;
         this.initials = initials;
-        this.avatarUrl = avatarUrl;
     }
 
     public UUID getId() { return id; }
@@ -72,6 +74,15 @@ public class InstructorEntity {
     public String getBioEn() { return bioEn; }
     public String getBioAr() { return bioAr; }
     public String getInitials() { return initials; }
-    public String getAvatarUrl() { return avatarUrl; }
     public String getAccountSubject() { return accountSubject; }
+
+    public void softDelete(Duration retention) {
+        if (isDeleted()) return;
+        deletedAt = Instant.now();
+        purgeAfter = deletedAt.plus(retention);
+    }
+
+    public boolean isDeleted() { return deletedAt != null; }
+    public Instant getDeletedAt() { return deletedAt; }
+    public Instant getPurgeAfter() { return purgeAfter; }
 }

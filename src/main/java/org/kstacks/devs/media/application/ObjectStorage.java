@@ -12,7 +12,6 @@ public interface ObjectStorage {
     default UploadGrant signUpload(String objectKey, String contentType, long contentLength, String contentDisposition) {
         return signUpload(objectKey, contentType, contentLength);
     }
-    URI signDownload(String objectKey);
     boolean exists(String objectKey);
     default long size(String objectKey) { return -1; }
     default void delete(String objectKey) { throw new UnsupportedOperationException("Object deletion is unavailable"); }

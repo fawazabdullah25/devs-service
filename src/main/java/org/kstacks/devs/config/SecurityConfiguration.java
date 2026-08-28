@@ -101,9 +101,8 @@ public class SecurityConfiguration {
                                     DispatcherType.ERROR)
                             .permitAll()
                             .requestMatchers(
-                                    "/actuator/health/**",
-                                    "/devs/api/v1/public/**",
-                                    "/devs/api/v1/webhooks/mux")
+                                "/actuator/health/**",
+                                "/devs/api/v1/public/**")
                             .permitAll()
                             .requestMatchers("/devs/api/v1/admin/**").hasAnyAuthority(adminAuthorities)
                             .anyRequest().authenticated())
@@ -132,8 +131,7 @@ public class SecurityConfiguration {
 
                         auth.requestMatchers(
                                 "/actuator/health/**",
-                                "/devs/api/v1/public/**",
-                                "/devs/api/v1/webhooks/mux").permitAll();
+                                "/devs/api/v1/public/**").permitAll();
 
                         if (properties.allowInsecureAdmin()) {
                             auth.requestMatchers("/devs/api/v1/admin/**").permitAll();

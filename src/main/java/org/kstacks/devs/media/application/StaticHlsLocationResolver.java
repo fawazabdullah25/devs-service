@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 @Component
@@ -34,6 +35,20 @@ public class StaticHlsLocationResolver {
             throw badRequest("Caption paths must end in .vtt");
         }
         return path;
+    }
+
+    /**
+     * Creates a safe, service-owned path for a standalone caption upload.
+     * Uploads are kept outside a published HLS package so replacing caption
+     * metadata never mutates or deletes the immutable video package.
+     */
+    public String captionUploadPath(UUID uploadId, String filename) {
+        if (uploadId == null || filename == null || filename.isBlank()) {
+            throw badRequest("Caption upload identity and filename are required");
+        }
+        var safeFilename = filename.trim();
+        return path((allowedPrefix.isEmpty() ? "" : allowedPrefix) +
+            "captions/" + uploadId + "/" + safeFilename);
     }
 
     public String childPath(String parentPath, String childReference) {

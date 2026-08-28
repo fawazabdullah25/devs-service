@@ -32,16 +32,15 @@ public class AdminMediaController {
         return service.list(status, deleted);
     }
 
-    @PostMapping("/uploads")
+    @PostMapping("/caption-uploads")
     @ResponseStatus(HttpStatus.CREATED)
-    public MediaDtos.UploadGrant upload(@Valid @RequestBody MediaDtos.UploadRequest request) {
-        return service.createUpload(request);
+    public MediaDtos.CaptionUploadGrant captionUpload(@Valid @RequestBody MediaDtos.CaptionUploadRequest request) {
+        return service.requestCaptionUpload(request);
     }
 
-    @PostMapping("/imports")
-    @ResponseStatus(HttpStatus.CREATED)
-    public MediaDtos.IngestResponse importSource(@Valid @RequestBody MediaDtos.ImportRequest request) {
-        return service.importAndIngest(request);
+    @PostMapping("/caption-uploads/{uploadId}/complete")
+    public MediaDtos.CaptionUploadCompleteResponse completeCaptionUpload(@PathVariable UUID uploadId) {
+        return service.completeCaptionUpload(uploadId);
     }
 
     @PostMapping("/static-hls")
@@ -52,14 +51,17 @@ public class AdminMediaController {
         return service.registerStaticHls(request);
     }
 
-    @PostMapping("/{id}/ingest")
-    public MediaDtos.IngestResponse ingest(@PathVariable UUID id) {
-        return service.ingest(id);
-    }
-
     @GetMapping("/{id}")
     public MediaDtos.MediaStatusResponse status(@PathVariable UUID id) {
         return service.status(id);
+    }
+
+    @org.springframework.web.bind.annotation.PatchMapping("/{id}/captions")
+    public MediaDtos.MediaStatusResponse updateCaptions(
+        @PathVariable UUID id,
+        @Valid @RequestBody MediaDtos.CaptionUpdateRequest request
+    ) {
+        return service.updateCaptions(id, request);
     }
 
     @DeleteMapping("/{id}")

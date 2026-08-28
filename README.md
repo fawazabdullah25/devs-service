@@ -14,7 +14,7 @@ The backend for **KStack Devs**, KStack's free learning platform for practical t
 - Direct-to-R2 cover image uploads for JPEG, PNG, WebP, and AVIF
 - Direct-to-R2 lesson attachment uploads with size and type enforcement
 - Seven-day attachment deletion retention and automatic object cleanup
-- Optional legacy R2-to-Mux ingestion path
+- Managed WebVTT caption uploads and caption metadata updates
 - KStacks ES256 JWT and role integration
 - PostgreSQL schema migrations through Flyway
 - Kubernetes liveness and readiness endpoints
@@ -60,9 +60,8 @@ docker compose up --build
 | `/devs/api/v1/admin/content/**` | Content metadata, lesson, cover, trash, and publication operations |
 | `PUT /devs/api/v1/admin/content/{id}/curriculum` | Atomically replace a series section and lesson order |
 | `/devs/api/v1/admin/instructors/**` | Reusable instructor profile management |
-| `/devs/api/v1/admin/media/**` | Media library, trash, HLS registration, and legacy ingestion |
+| `/devs/api/v1/admin/media/**` | Media library, trash, static-HLS registration, and caption management |
 | `/devs/api/v1/admin/units/{unitId}/attachments/**` | Attachment upload, confirmation, deletion, restore, and ordering |
-| `/devs/api/v1/webhooks/mux` | Signature-verified legacy Mux events |
 | `/actuator/health/liveness` | Container and Kubernetes liveness probe |
 | `/actuator/health/readiness` | Database-aware readiness probe |
 
@@ -81,7 +80,7 @@ The initial policy accepts PDF, ZIP, Office documents, plain text, Markdown, com
 
 Because the chosen R2 custom domain is public, attachment URLs are public too. Keep `attachments/` on a dedicated media origin and never store private student information there. A future authenticated-download policy should use a private bucket or signed downloads rather than CORS as access control.
 
-R2 CORS must allow the frontend origins, `PUT` and `GET`, and the `Content-Type` and `Content-Disposition` request headers.
+R2 CORS must allow the frontend origins, `GET`, `HEAD`, and `PUT`, and the `Content-Type` and `Content-Disposition` request headers. The exact policy is documented in [docs/architecture.md](docs/architecture.md#cloudflare-r2-uploads).
 
 ## 🗂️ Series curricula
 
@@ -93,7 +92,9 @@ Flat published series remain valid. Once a published series uses sections, every
 
 ## 🎬 Static HLS
 
-Set `STATIC_HLS_ENABLED=true`, configure `STATIC_HLS_BASE_URL`, and optionally restrict registrations with `STATIC_HLS_ALLOWED_PATH_PREFIX`. `POST /devs/api/v1/admin/media/static-hls` validates the master playlist, every rendition playlist, and every caption track before creating a ready media record. Redirects and host-changing paths are rejected.
+Set `STATIC_HLS_ENABLED=true`, configure `STATIC_HLS_BASE_URL`, and optionally restrict registrations with `STATIC_HLS_ALLOWED_PATH_PREFIX`. `POST /devs/api/v1/admin/media/static-hls` validates the master playlist, every rendition playlist, and every caption track before creating a ready media record. The service calculates duration by summing each rendition's `EXTINF` entries and rejects incomplete or materially mismatched renditions. Redirects and host-changing paths are rejected.
+
+Caption files may already exist under the configured media origin, or an admin may use `POST /devs/api/v1/admin/media/caption-uploads` to receive a short-lived direct-to-R2 upload grant and then call `/caption-uploads/{uploadId}/complete`. The returned relative path is included in the static-HLS registration request. `PATCH /devs/api/v1/admin/media/{mediaId}/captions` replaces caption metadata without changing the immutable HLS package; the service validates each referenced WebVTT file before saving.
 
 In production, `STATIC_HLS_ALLOWED_PATH_PREFIX` must match the dedicated key prefix used by Devs. Purge workers refuse prefix deletion when it is empty or when a manifest falls outside it. The R2 credential therefore needs bucket-scoped object read, write, and delete access; it does not need account-wide or bucket-creation permission.
 
@@ -109,6 +110,8 @@ The database stores relative paths, allowing the CDN hostname to change without 
 | `DEVS_JWT_PUBLIC_KEY`, `DEVS_JWT_ISSUER` | ES256 trust configuration | Empty |
 | `DEVS_ADMIN_ROLES`, `DEVS_STUDENT_ROLES` | Authorized central roles | `DEVS_ADMIN,ADMIN` / `STUDENT` |
 | `STATIC_HLS_BASE_URL` | Public HLS and caption origin | Invalid placeholder |
+| `STATIC_HLS_ALLOWED_PATH_PREFIX` | Allowed immutable HLS/caption key prefix | Empty |
+| `R2_ENABLED` | Enable direct object-storage operations | `false` |
 | `R2_ENDPOINT`, `R2_BUCKET` | R2 S3 endpoint and bucket | Empty |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Runtime-only R2 credentials | Empty |
 | `ATTACHMENTS_PUBLIC_BASE_URL` | Public R2 custom-domain origin | HLS base URL |
@@ -120,9 +123,8 @@ The database stores relative paths, allowing the CDN hostname to change without 
 | `DEVS_MEDIA_RETENTION` | Deleted media and cover retention | `P7D` |
 | `DEVS_MEDIA_VERSION_RETENTION` | Replaced lesson-video rollback window | `P30D` |
 | `DEVS_MEDIA_PURGE_DELAY` | Media and cover cleanup scan interval | `PT1H` |
-| `DEVS_MEDIA_STALE_UPLOAD_AFTER` | Remove unconfirmed media and cover uploads after | `PT24H` |
+| `DEVS_MEDIA_STALE_UPLOAD_AFTER` | Remove unconfirmed caption uploads after | `PT24H` |
 | `DEVS_TRASH_PURGE_DELAY` | Content and lesson trash cleanup scan interval | `PT1H` |
-| `MUX_ENABLED` | Allow new legacy Mux ingestion; existing Mux playback remains compatible | `false` |
 
 The complete reference is in [.env.example](.env.example) and [the architecture guide](docs/architecture.md). Never commit populated environment files or pass credentials as Docker build arguments.
 

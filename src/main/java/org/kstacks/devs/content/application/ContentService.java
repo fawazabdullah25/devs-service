@@ -9,6 +9,9 @@ import org.kstacks.devs.content.domain.LearningContentEntity;
 import org.kstacks.devs.content.domain.LearningContentRepository;
 import org.kstacks.devs.content.domain.PublicationStatus;
 import org.kstacks.devs.content.domain.SpokenLanguage;
+import org.kstacks.devs.content.domain.TagEntity;
+import org.kstacks.devs.content.domain.TagGroup;
+import org.kstacks.devs.content.domain.TagRepository;
 import org.kstacks.devs.media.domain.MediaAssetRepository;
 import org.kstacks.devs.media.domain.MediaStatus;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,11 +34,10 @@ import java.util.UUID;
 import static org.kstacks.devs.content.application.ContentSpecifications.active;
 import static org.kstacks.devs.content.application.ContentSpecifications.kind;
 import static org.kstacks.devs.content.application.ContentSpecifications.language;
-import static org.kstacks.devs.content.application.ContentSpecifications.level;
 import static org.kstacks.devs.content.application.ContentSpecifications.publicVisibility;
 import static org.kstacks.devs.content.application.ContentSpecifications.published;
 import static org.kstacks.devs.content.application.ContentSpecifications.query;
-import static org.kstacks.devs.content.application.ContentSpecifications.topic;
+import static org.kstacks.devs.content.application.ContentSpecifications.tag;
 
 /** Application operations for the learning catalog and its editorial lifecycle. */
 @Service
@@ -47,6 +49,7 @@ public class ContentService {
     private final ContentMapper mapper;
     private final ContentAccessPolicy accessPolicy;
     private final InstructorRepository instructorRepository;
+    private final TagRepository tagRepository;
 
     @Autowired
     public ContentService(
@@ -54,13 +57,15 @@ public class ContentService {
         MediaAssetRepository mediaRepository,
         ContentMapper mapper,
         ContentAccessPolicy accessPolicy,
-        InstructorRepository instructorRepository
+        InstructorRepository instructorRepository,
+        TagRepository tagRepository
     ) {
         this.repository = repository;
         this.mediaRepository = mediaRepository;
         this.mapper = mapper;
         this.accessPolicy = accessPolicy;
         this.instructorRepository = instructorRepository;
+        this.tagRepository = tagRepository;
     }
 
     /** Compatibility constructor for unit tests that predate instructor support. */
@@ -70,7 +75,7 @@ public class ContentService {
         ContentMapper mapper,
         ContentAccessPolicy accessPolicy
     ) {
-        this(repository, mediaRepository, mapper, accessPolicy, null);
+        this(repository, mediaRepository, mapper, accessPolicy, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -96,15 +101,14 @@ public class ContentService {
     public ContentDtos.Catalog catalog(
         String text,
         ContentKind contentKind,
-        String topicSlug,
-        String levelSlug,
+        String tagSlug,
         SpokenLanguage spokenLanguage
     ) {
         var specification = published().and(publicVisibility()).and(active()).and(query(text)).and(kind(contentKind))
-            .and(topic(normalizeTopic(topicSlug))).and(level(normalizeLevel(levelSlug))).and(language(spokenLanguage));
+            .and(tag(normalizeTag(tagSlug))).and(language(spokenLanguage));
         var items = repository.findAll(specification, Sort.by(Sort.Direction.DESC, "publishedAt"))
             .stream().map(mapper::toDto).toList();
-        return new ContentDtos.Catalog(items, items.size(), ReferenceCatalog.topics(), ReferenceCatalog.levels());
+        return new ContentDtos.Catalog(items, items.size(), allTags());
     }
 
     @Transactional(readOnly = true)
@@ -133,8 +137,8 @@ public class ContentService {
     public ContentDtos.ReferenceData referenceData() {
         var instructors = instructorRepository == null
             ? List.<ContentDtos.InstructorProfile>of()
-            : instructorRepository.findAllByOrderByNameEnAsc().stream().map(mapper::toProfile).toList();
-        return new ContentDtos.ReferenceData(ReferenceCatalog.topics(), ReferenceCatalog.levels(), instructors);
+            : instructorRepository.findAllByDeletedAtIsNullOrderByNameEnAsc().stream().map(mapper::toProfile).toList();
+        return new ContentDtos.ReferenceData(allTags(), instructors);
     }
 
     @Transactional(readOnly = true)
@@ -173,24 +177,13 @@ public class ContentService {
         }
     }
 
-    /** Compatibility adapter for clients that still use the original create DTO name. */
-    @Deprecated
-    @Transactional
-    public ContentDtos.LearningContent create(ContentDtos.MetadataRequest request) {
-        return create(new ContentDtos.CreateMetadataRequest(
-            request.title(), request.slug(), request.summary(), request.kind(), request.visibility()
-        ));
-    }
-
     @Transactional
     public ContentDtos.LearningContent update(UUID id, ContentDtos.UpdateMetadataRequest request) {
         var content = find(id);
         var slug = slug(request.slug(), "Slug");
         if (repository.existsBySlugAndIdNot(slug, id)) throw conflict("Slug is already in use");
 
-        var levelSlug = normalizeLevel(required(request.levelSlug(), "Level"));
-        if (!ReferenceCatalog.hasLevel(levelSlug)) throw badRequest("Unknown level");
-        var topicSlugs = normalizeTopics(request.topicSlugs());
+        var tags = resolveTags(request);
         var instructors = resolveInstructors(request.instructorIds());
         var featuredRank = request.featuredRank();
         if (featuredRank != null && featuredRank < 1) throw badRequest("Featured rank must be positive");
@@ -205,27 +198,9 @@ public class ContentService {
             clean(request.descriptionAr()),
             request.visibility(),
             request.spokenLanguage(),
-            levelSlug,
-            topicSlugs,
+            tags,
             instructors,
             featuredRank
-        );
-        return mapper.toDto(content);
-    }
-
-    /** Compatibility adapter for the initial minimal metadata endpoint. */
-    @Deprecated
-    @Transactional
-    public ContentDtos.LearningContent update(UUID id, ContentDtos.MetadataRequest request) {
-        var content = find(id);
-        var slug = slug(request.slug(), "Slug");
-        if (repository.existsBySlugAndIdNot(slug, id)) throw conflict("Slug is already in use");
-        content.updateMetadata(
-            slug,
-            request.kind(),
-            request.visibility(),
-            required(request.title(), "Title", 240),
-            required(request.summary(), "Summary", 600)
         );
         return mapper.toDto(content);
     }
@@ -331,6 +306,17 @@ public class ContentService {
         if (content.getUnits().stream().anyMatch(candidate -> !candidate.getId().equals(unitId) && candidate.getSlug().equals(slug))) {
             throw conflict("Unit slug must be unique within the content");
         }
+        if (request.sectionId() != null && content.getKind() == ContentKind.COURSE) {
+            throw badRequest("Courses cannot contain sections");
+        }
+        var section = request.sectionId() == null ? null : content.getSections().stream()
+            .filter(candidate -> candidate.getId().equals(request.sectionId()))
+            .findFirst()
+            .orElseThrow(() -> badRequest("Section does not belong to this series"));
+        if (content.getKind() == ContentKind.SERIES && content.getStatus() == PublicationStatus.PUBLISHED
+            && !content.getSections().isEmpty() && section == null) {
+            throw badRequest("Published sectioned series require a destination section");
+        }
         unit.updateMetadata(
             slug,
             required(request.title(), "Unit title", 240),
@@ -338,6 +324,7 @@ public class ContentService {
             clean(request.summary()),
             clean(request.summaryAr())
         );
+        unit.organize(section, unit.getPosition());
         return mapper.toDto(content);
     }
 
@@ -378,15 +365,29 @@ public class ContentService {
         return repository.findAllByDeletedAtIsNotNullAndPurgeAfterLessThanEqualOrderByPurgeAfter(now);
     }
 
-    private Set<String> normalizeTopics(List<String> requested) {
-        if (requested == null) throw badRequest("Topics are required");
-        var topics = new LinkedHashSet<String>();
+    private List<ContentDtos.Tag> allTags() {
+        return tagRepository == null ? List.of() : tagRepository.findAllByOrderByGroupAscNameEnAsc().stream()
+            .map(tag -> new ContentDtos.Tag(tag.getId(), tag.getGroup(), tag.getSlug(),
+                new ContentDtos.LocalizedText(tag.getNameEn(), tag.getNameAr())))
+            .toList();
+    }
+
+    private Set<TagEntity> resolveTags(ContentDtos.UpdateMetadataRequest request) {
+        if (tagRepository == null) throw badRequest("Tag support is unavailable");
+        var requested = request.effectiveTagSlugs();
+        if (requested == null) throw badRequest("Tags are required");
+        var tags = new LinkedHashSet<TagEntity>();
+        var difficultyCount = 0;
         for (var value : requested) {
-            var slug = ReferenceCatalog.normalizeTopicSlug(value);
-            if (!ReferenceCatalog.hasTopic(slug)) throw badRequest("Unknown topic: " + value);
-            if (!topics.add(slug)) throw badRequest("A topic cannot be selected more than once");
+            var slug = normalizeTag(value);
+            var tag = tagRepository.findBySlug(slug)
+                .orElseThrow(() -> badRequest("Unknown tag: " + value));
+            if (!tags.add(tag)) throw badRequest("A tag cannot be selected more than once");
+            if (tag.getGroup() == TagGroup.DIFFICULTY && ++difficultyCount > 1) {
+                throw badRequest("Only one difficulty tag can be selected");
+            }
         }
-        return topics;
+        return tags;
     }
 
     private Set<InstructorEntity> resolveInstructors(List<UUID> ids) {
@@ -431,12 +432,9 @@ public class ContentService {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Content not found"));
     }
 
-    private String normalizeTopic(String value) {
-        return value == null || value.isBlank() ? value : ReferenceCatalog.normalizeTopicSlug(value);
-    }
-
-    private String normalizeLevel(String value) {
-        return value == null || value.isBlank() ? value : ReferenceCatalog.normalizeLevelSlug(value);
+    private String normalizeTag(String value) {
+        if (value == null) return null;
+        return value.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     private String required(String value, String name) {

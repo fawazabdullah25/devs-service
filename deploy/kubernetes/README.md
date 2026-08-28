@@ -21,9 +21,6 @@ R2_ENDPOINT
 R2_BUCKET
 R2_ACCESS_KEY_ID
 R2_SECRET_ACCESS_KEY
-MUX_TOKEN_ID (only when the legacy Mux path is enabled)
-MUX_TOKEN_SECRET (only when the legacy Mux path is enabled)
-MUX_WEBHOOK_SECRET (only when the legacy Mux path is enabled)
 ```
 
 Use External Secrets/Sealed Secrets/the team's normal secret manager. For a temporary non-production namespace, `kubectl create secret generic devs-secrets --from-literal=...` is sufficient; do not commit the generated Secret.
@@ -37,6 +34,6 @@ kubectl rollout status deployment/devs-service
 kubectl rollout status deployment/devs-frontend
 ```
 
-Then route the public frontend host to `devs-frontend:3000`, and add the gateway `/devs/api/**` route to `devs-service:8080`. Managed PostgreSQL and outbound HTTPS to the configured static-video origin must be reachable from the service Pods. If Mux is enabled, Mux must also reach the webhook path.
+Then route the public frontend host to `devs-frontend:3000`, and add the gateway `/devs/api/**` route to `devs-service:8080`. Managed PostgreSQL and outbound HTTPS to the configured static-video origin must be reachable from the service Pods.
 
 Run `kubectl diff -k deploy/kubernetes` in the actual namespace before applying to production.

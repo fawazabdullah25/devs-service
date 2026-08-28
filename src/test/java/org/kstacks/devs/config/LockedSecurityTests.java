@@ -16,6 +16,7 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -62,6 +63,13 @@ class LockedSecurityTests {
                 .contentType("application/json")
                 .content("{\"sections\":[],\"unsectionedUnitIds\":[]}"))
             .andExpect(status().isNotFound())
+            .andExpect(header().doesNotExist(HttpHeaders.WWW_AUTHENTICATE));
+    }
+
+    @Test
+    void providerWebhookRoutesAreNotPublic() throws Exception {
+        mockMvc.perform(post("/devs/api/v1/webhooks/provider"))
+            .andExpect(status().isForbidden())
             .andExpect(header().doesNotExist(HttpHeaders.WWW_AUTHENTICATE));
     }
 }

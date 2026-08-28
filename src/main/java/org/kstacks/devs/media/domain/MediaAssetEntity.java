@@ -36,12 +36,6 @@ public class MediaAssetEntity {
     @Column(nullable = false, length = 16)
     private MediaStatus status;
 
-    @Column(name = "provider_asset_id")
-    private String providerAssetId;
-
-    @Column(name = "playback_id")
-    private String playbackId;
-
     @Column(name = "playback_path")
     private String playbackPath;
 
@@ -51,15 +45,6 @@ public class MediaAssetEntity {
     @ElementCollection
     @CollectionTable(name = "media_caption_tracks", joinColumns = @JoinColumn(name = "media_id"))
     private List<MediaCaptionTrack> captionTracks = new ArrayList<>();
-
-    @Column(name = "source_object_key")
-    private String sourceObjectKey;
-
-    @Column(name = "source_filename")
-    private String sourceFilename;
-
-    @Column(name = "source_content_type", length = 160)
-    private String sourceContentType;
 
     @Column(name = "duration_seconds", nullable = false)
     private long durationSeconds;
@@ -91,23 +76,6 @@ public class MediaAssetEntity {
 
     protected MediaAssetEntity() {}
 
-    public static MediaAssetEntity uploading(String objectKey, String filename, String contentType) {
-        var media = new MediaAssetEntity();
-        media.id = UUID.randomUUID();
-        media.provider = MediaProvider.MUX;
-        media.status = MediaStatus.UPLOADING;
-        media.sourceObjectKey = objectKey;
-        media.sourceFilename = filename;
-        media.sourceContentType = contentType;
-        return media;
-    }
-
-    public static MediaAssetEntity imported(String objectKey, String filename, String contentType, String checksumSha256) {
-        var media = uploading(objectKey, filename, contentType);
-        media.checksumSha256 = checksumSha256;
-        return media;
-    }
-
     public static MediaAssetEntity staticHls(
         String playbackPath,
         long durationSeconds,
@@ -127,30 +95,9 @@ public class MediaAssetEntity {
         return media;
     }
 
-    public void markProcessing(String providerAssetId) {
-        this.providerAssetId = providerAssetId;
-        this.status = MediaStatus.PROCESSING;
-        this.failureMessage = null;
-        this.deletedAt = null;
-        this.purgeAfter = null;
-        this.retainedForUnitId = null;
-        this.deletedFromStatus = null;
-    }
-
-    public void markReady(String playbackId, long durationSeconds) {
-        this.playbackId = playbackId;
-        this.durationSeconds = Math.max(0, durationSeconds);
-        this.status = MediaStatus.READY;
-        this.failureMessage = null;
-        this.deletedAt = null;
-        this.purgeAfter = null;
-        this.retainedForUnitId = null;
-        this.deletedFromStatus = null;
-    }
-
-    public void markFailed(String message) {
-        this.status = MediaStatus.FAILED;
-        this.failureMessage = message == null ? "Media processing failed" : message.substring(0, Math.min(message.length(), 2000));
+    public void replaceCaptionTracks(List<MediaCaptionTrack> tracks) {
+        this.captionTracks.clear();
+        this.captionTracks.addAll(tracks);
     }
 
     public void softDelete(Duration retention) {
@@ -223,16 +170,10 @@ public class MediaAssetEntity {
     }
 
     public UUID getId() { return id; }
-    public MediaProvider getProvider() { return provider; }
     public MediaStatus getStatus() { return status; }
-    public String getProviderAssetId() { return providerAssetId; }
-    public String getPlaybackId() { return playbackId; }
     public String getPlaybackPath() { return playbackPath; }
     public String getEncodingVersion() { return encodingVersion; }
     public List<MediaCaptionTrack> getCaptionTracks() { return List.copyOf(captionTracks); }
-    public String getSourceObjectKey() { return sourceObjectKey; }
-    public String getSourceFilename() { return sourceFilename; }
-    public String getSourceContentType() { return sourceContentType; }
     public long getDurationSeconds() { return durationSeconds; }
     public String getChecksumSha256() { return checksumSha256; }
     public String getFailureMessage() { return failureMessage; }

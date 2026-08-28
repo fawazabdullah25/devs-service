@@ -8,6 +8,7 @@ import org.kstacks.devs.config.StaticHlsProperties;
 import org.kstacks.devs.media.api.MediaDtos;
 import org.kstacks.devs.media.domain.MediaAssetEntity;
 import org.kstacks.devs.media.domain.MediaAssetRepository;
+import org.kstacks.devs.media.domain.CaptionUploadRepository;
 import org.kstacks.devs.media.domain.MediaStatus;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -34,7 +35,7 @@ import static org.mockito.Mockito.when;
 class MediaLifecycleServiceTests {
     @Mock private MediaAssetRepository repository;
     @Mock private ObjectStorage storage;
-    @Mock private VideoProvider videoProvider;
+    @Mock private CaptionUploadRepository captionUploads;
     @Mock private StaticHlsPackageValidator validator;
 
     private MediaService service;
@@ -45,7 +46,7 @@ class MediaLifecycleServiceTests {
             true, URI.create("https://video.example.test/"), "pilots", Duration.ofSeconds(2)
         );
         service = new MediaService(
-            repository, storage, videoProvider, new MediaProperties(1_000, 20), new ObjectMapper(), validator,
+            repository, captionUploads, storage, new MediaProperties(1_000, 20), validator,
             new StaticHlsLocationResolver(staticProperties)
         );
         lenient().when(repository.findCurrentAttachmentRows()).thenReturn(List.of());

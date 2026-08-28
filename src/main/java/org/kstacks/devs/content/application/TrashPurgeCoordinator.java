@@ -106,7 +106,7 @@ public class TrashPurgeCoordinator {
         removeOwnedMedia(media, Set.copyOf(unitIds), contentId, true);
         entityManager.flush();
 
-        // Unit attachments, sections, topics, instructors, and covers have
+        // Unit attachments, sections, tags, instructors, and covers have
         // database-level cascade rules. Current media references and retained
         // version FKs were handled above before this aggregate delete.
         entityManager.remove(content);

@@ -75,13 +75,6 @@ devs:
     bucket: ${R2_BUCKET:}
     access-key-id: ${R2_ACCESS_KEY_ID:}
     secret-access-key: ${R2_SECRET_ACCESS_KEY:}
-  mux:
-    enabled: ${MUX_ENABLED:false}
-    token-id: ${MUX_TOKEN_ID:}
-    token-secret: ${MUX_TOKEN_SECRET:}
-    webhook-secret: ${MUX_WEBHOOK_SECRET:}
-    playback-policy: ${MUX_PLAYBACK_POLICY:public}
-
 ---
 spring:
   config:

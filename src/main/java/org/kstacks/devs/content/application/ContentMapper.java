@@ -10,7 +10,6 @@ import org.kstacks.devs.content.domain.LearningContentEntity;
 import org.kstacks.devs.media.application.CoverService;
 import org.kstacks.devs.media.application.StaticHlsLocationResolver;
 import org.kstacks.devs.media.domain.MediaAssetEntity;
-import org.kstacks.devs.media.domain.MediaProvider;
 import org.kstacks.devs.media.domain.MediaStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -22,30 +21,39 @@ public class ContentMapper {
     private final StaticHlsLocationResolver staticHlsLocations;
     private final AttachmentService attachmentService;
     private final CoverService coverService;
+    private final InstructorAvatarService instructorAvatarService;
 
     @Autowired
     public ContentMapper(
         StaticHlsLocationResolver staticHlsLocations,
         AttachmentService attachmentService,
-        CoverService coverService
+        CoverService coverService,
+        InstructorAvatarService instructorAvatarService
     ) {
         this.staticHlsLocations = staticHlsLocations;
         this.attachmentService = attachmentService;
         this.coverService = coverService;
+        this.instructorAvatarService = instructorAvatarService;
+    }
+
+    ContentMapper(StaticHlsLocationResolver staticHlsLocations, AttachmentService attachmentService, CoverService coverService) {
+        this(staticHlsLocations, attachmentService, coverService, null);
     }
 
     ContentMapper(StaticHlsLocationResolver staticHlsLocations, AttachmentService attachmentService) {
-        this(staticHlsLocations, attachmentService, null);
+        this(staticHlsLocations, attachmentService, null, null);
     }
 
     ContentMapper(StaticHlsLocationResolver staticHlsLocations) {
-        this(staticHlsLocations, null, null);
+        this(staticHlsLocations, null, null, null);
     }
 
     public ContentDtos.LearningContent toDto(LearningContentEntity entity) {
-        var topics = entity.getTopicSlugs().stream()
-            .sorted()
-            .map(ReferenceCatalog::topic)
+        var tags = entity.getTags().stream()
+            .sorted(Comparator.comparing((org.kstacks.devs.content.domain.TagEntity tag) -> tag.getGroup().name())
+                .thenComparing(org.kstacks.devs.content.domain.TagEntity::getNameEn))
+            .map(tag -> new ContentDtos.Tag(tag.getId(), tag.getGroup(), tag.getSlug(),
+                text(tag.getNameEn(), tag.getNameAr())))
             .toList();
         var instructors = entity.getInstructors().stream()
             .sorted(Comparator.comparing(InstructorEntity::getNameEn))
@@ -67,7 +75,7 @@ public class ContentMapper {
             text(entity.getTitleEn(), entity.getTitleAr()),
             text(entity.getSummaryEn(), entity.getSummaryAr()),
             text(entity.getDescriptionEn(), entity.getDescriptionAr()),
-            entity.getSpokenLanguage(), ReferenceCatalog.level(entity.getLevelSlug()), topics, instructors, sections, units,
+            entity.getSpokenLanguage(), tags, instructors, sections, units,
             coverUrl(entity), entity.getFeaturedRank(), entity.getPublishedAt(), entity.getViews(), entity.getWatchedMinutes(),
             entity.getDeletedAt(), entity.getPurgeAfter()
         );
@@ -76,15 +84,21 @@ public class ContentMapper {
     public ContentDtos.InstructorProfile toProfile(InstructorEntity instructor) {
         return new ContentDtos.InstructorProfile(
             instructor.getId(), instructor.getNameEn(), instructor.getNameAr(), instructor.getBioEn(), instructor.getBioAr(),
-            instructor.getInitials(), instructor.getAvatarUrl(), instructor.getAccountSubject()
+            instructor.getInitials(), avatarUrl(instructor), instructor.getAccountSubject()
         );
     }
 
     private ContentDtos.Instructor toDto(InstructorEntity instructor) {
         return new ContentDtos.Instructor(
             instructor.getId(), text(instructor.getNameEn(), instructor.getNameAr()),
-            text(instructor.getBioEn(), instructor.getBioAr()), instructor.getInitials(), instructor.getAvatarUrl()
+            text(instructor.getBioEn(), instructor.getBioAr()), instructor.getInitials(), avatarUrl(instructor)
         );
+    }
+
+    private String avatarUrl(InstructorEntity instructor) {
+        if (instructorAvatarService == null) return null;
+        var active = instructorAvatarService.resolveActiveUrl(instructor.getId());
+        return active == null ? null : active.toString();
     }
 
     public ContentDtos.ContentUnit toUnitDto(ContentUnitEntity unit) {
@@ -106,7 +120,7 @@ public class ContentMapper {
     ContentDtos.MediaAsset toDto(MediaAssetEntity media) {
         if (media == null) {
             return new ContentDtos.MediaAsset(
-                null, MediaStatus.UPLOADING, 0, null, null, null, MediaProvider.MUX, java.util.List.of()
+                null, MediaStatus.READY, 0, null, java.util.List.of()
             );
         }
         var playbackUrl = media.getPlaybackPath() == null ? null : staticHlsLocations.resolve(media.getPlaybackPath());
@@ -114,13 +128,14 @@ public class ContentMapper {
             .map(track -> new ContentDtos.CaptionTrack(
                 track.getLanguage(),
                 track.getLabel(),
+                track.getPath(),
                 staticHlsLocations.resolve(track.getPath()),
                 track.isDefaultTrack()
             ))
             .toList();
         return new ContentDtos.MediaAsset(
-            media.getId(), media.getStatus(), media.getDurationSeconds(), media.getPlaybackId(), playbackUrl, null,
-            media.getProvider(), captions, media.getEncodingVersion(), media.getPlaybackPath(), media.getUpdatedAt()
+            media.getId(), media.getStatus(), media.getDurationSeconds(), playbackUrl,
+            captions, media.getEncodingVersion(), media.getPlaybackPath(), media.getUpdatedAt()
         );
     }
 
